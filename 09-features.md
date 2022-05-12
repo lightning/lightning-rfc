@@ -51,6 +51,7 @@ The Context column decodes as follows:
 | 46/47 | `option_scid_alias`               | Supply channel aliases for routing                        | IN       |                           | [BOLT #2][bolt02-channel-ready]                                       |
 | 48/49 | `option_payment_metadata`         | Payment metadata in tlv record                            | 9        |                           | [BOLT #11](11-payment-encoding.md#tagged-fields)                      |
 | 50/51 | `option_zeroconf`                 | Understands zeroconf channel types                        | IN       | `option_scid_alias`       | [BOLT #2][bolt02-channel-ready]                                       |
+| 52/53 | `option_htlc_hold`               | Hold HTLCs and forward on receipt of an onion message     | IN       | `option_onion_messages`                                   |
 
 
 ## Requirements
