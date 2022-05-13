@@ -1972,6 +1972,25 @@ is destined, is described in [BOLT #4](04-onion-routing.md).
    * [`sha256`:`payment_hash`]
    * [`u32`:`cltv_expiry`]
    * [`1366*byte`:`onion_routing_packet`]
+   * [`update_add_htlc_tlvs`:`tlvs`]
+
+1. `tlv_stream`: `update_add_htlc_tlvs`
+2. types:
+    1. type: 0 (`hold_htlc`)
+    2. data:
+        * [`32*bytes`:`payment_release_secret`]
+
+#### TLV fields for `held_htlc_available`
+1. `tlv_stream`: `held_htlc_available`
+2. types:
+
+#### TLV fields for `release_held_htlc`
+
+1. `tlv_stream`: `release_held_htlc`
+2. types:
+    1. type: 0 (`payment_release_secret`)
+    2. data:
+        * [`32*bytes`:`payment_release_secret`]
 
 1. `tlv_stream`: `update_add_htlc_tlvs`
 2. types:
@@ -2016,6 +2035,19 @@ A sending node:
   - MUST increase the value of `id` by 1 for each successive offer.
   - if it is relaying a payment inside a blinded route:
     - MUST set `path_key` (see [Route Blinding](04-onion-routing.md#route-blinding))
+  - MUST NOT include a `hold_htlc` TLV unless the sending node expects the
+    final recipient of the HTLC to be offline at the time the HTLC would arrive
+  - MUST NOT include a `hold_htlc` TLV unless the sending node expects to be
+    offline for an extended duration starting soon.
+  - If the `hold_htlc` TLV is present:
+    - MUST immediately send at least two onion messages across at least two
+      different paths to the final HTLC recipient.
+    - Each onion message MUST contain a `held_htlc_available` TLV.
+    - Each onion message MUST contain a unique `reply_path`s which terminates
+      at the reciever of the `update_add_htlc` message.
+    - Each `reply_path` MUST contain a `release_held_htlc` TLV for the
+      `update_add_htlc` recipient in the `encrypted_data_tlvs` with a
+      `payment_release_secret` matching that in the `hold_htlc` TLV.
 
 `id` MUST NOT be reset to 0 after the update is complete (i.e. after `revoke_and_ack` has
 been received). It MUST continue incrementing instead.
@@ -2047,6 +2079,12 @@ A receiving node:
     - MUST respond with an error as detailed in [Failure Messages](04-onion-routing.md#failure-messages)
   - Otherwise:
     - MUST follow the requirements for the reader of `payload` in [Payload Format](04-onion-routing.md#payload-format)
+  - if the `hold_htlc` TLV is present:
+    - MUST NOT forward the HTLC until a corresponding `release_held_htlc` onion
+      message is received with a matching `payment_release_secret`.
+    - Upon receipt of a `release_held_htlc` onion message with a matching
+      `payment_release_secret` the HTLC SHOULD be treated as any HTLC without
+      the `hold_htlc` TLV and forwarded as usual.
 
 The `onion_routing_packet` contains an obfuscated list of hops and instructions for each hop along the path.
 It commits to the HTLC by setting the `payment_hash` as associated data, i.e. includes the `payment_hash` in the computation of HMACs.
@@ -2081,6 +2119,19 @@ reach a state where it is unable to send or receive any non-dust HTLC while
 maintaining its channel reserve (because of the increased weight of the
 commitment transaction), resulting in a degraded channel. See [#728](https://github.com/lightningnetwork/lightning-rfc/issues/728)
 for more details.
+
+For often-offline recipients, e.g. mobile clients, nodes can use the
+`hold_htlc` TLV to prevent further forwarding of an HTLC until the recipient
+comes online. As long as the final recipients' counterparty is online and
+storing onion messages for the recipient, the recipient can reply to the onion
+message when they come online, unblock the HTLC, and expect to receive it
+quickly thereafter.
+
+Note that if the sender expects to be online when the recipient comes online,
+they can utilize the `release_held_htlc` onion message without utilizing the
+`hold_htlc` TLV - they can simply send a `held_htlc_available` onion message
+to the final recipient and wait to send any HTLC at all until they receive a
+`release_held_htlc` message back.
 
 ### Removing an HTLC: `update_fulfill_htlc`, `update_fail_htlc`, and `update_fail_malformed_htlc`
 
