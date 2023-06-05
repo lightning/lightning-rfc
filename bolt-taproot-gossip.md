@@ -36,12 +36,15 @@ The initial version of the Lightning Network gossip protocol as defined in
 channels, the `channel_announcement` message is used to advertise the channel to
 the rest of the network. Nodes in the network use the content of this message to
 prove that the channel is sufficiently bound to the Lightning Network context
-and that it is owned by the nodes advertising the channel. This proof and
-verification protocol is, however, not compatible with SegWit V1 (P2TR) outputs
-and so cannot be used to advertise the channels defined in the
-[Simple Taproot Channel][simple-taproot-chans] proposal. This document thus aims
-to define an updated gossip protocol that will allow nodes to both advertise and
-verify taproot channels. This part of the update affects the
+by being provided enough information to prove that the script is a 2-of-2 
+multi-sig and that it is owned by the nodes advertising the channel. This 
+ownership proof is done by including signatures in the `channel_announcement` 
+from both the node ID keys along with the bitcoin keys used in the P2WSH script. 
+This proof and verification protocol is, however, not compatible with SegWit V1 
+(P2TR) outputs and so cannot be used to advertise the channels defined in the 
+[Simple Taproot Channel][simple-taproot-chans] proposal. This document thus aims 
+to define an updated gossip protocol that will allow nodes to both advertise and 
+verify taproot channels. This part of the update affects the 
 `announcement_signatures` and `channel_announcement` messages.
 
 The opportunity is also taken to rework the `node_announcement` and
@@ -138,13 +141,13 @@ separate signatures in the `channel_announcement`. However, [BIP-340][bip-340]
 signatures and the MuSig2 protocol allow us to now aggregate these four
 signatures into a single one. Verifiers will then be able to aggregate the four
 keys (`bitcoin_key_1`, `bitcoin_key_2`, `node_ID_1` and `node_ID_2`) using
-MuSig2 key aggregation and then they can do a single signature verification
+MuSig2 key aggregation, and then they can do a single signature verification
 check instead of four individual checks.
 
-## Timestamp fields
+## Block-height fields
 
-In this document, the `timestamp` fields in messages are block heights instead
-of the UNIX timestamps used in the legacy gossip messages. 
+In the messages defined in this document, block heights are used as timestamps
+instead of the UNIX timestamps used in the legacy set of gossip messages. 
 
 ### Rate Limiting
 
@@ -165,7 +168,7 @@ provides an incentive for nodes not to spam the network with too many updates.
 To also prevent nodes from building up too large of a burst-buffer with which 
 they can spam the network and to give a limit to how low the block height on a 
 `node_announcement_2` can be: nodes should not be allowed to use a block height
-smaller 1440 (~ a day worth of blocks) below the current block height.
+smaller 2016 (~ one week worth of blocks) below the current block height.
 
 ### Simplifies Channel Announcement Queries
 
@@ -217,7 +220,7 @@ un-upgraded nodes will drop this message due to the fact that no legacy
 nodes will also not be able to use a legacy `node_announcement` to propagate 
 their new `node_announcement_2` message.
 
-### Consideration & Suggestions
+### Considerations & Suggestions
 
 While the network is in the upgrade phase, the following suggestions apply:
 
@@ -269,7 +272,8 @@ gossip messages.
 
 A node can be assumed to understand the new gossip v2 messages if:
 
-- They advertise `option_taproot_gossip` in a legacy `node_announcement` message
+- They advertise `option_taproot_gossip` in the `init` or 
+  legacy `node_announcement` messages
   OR
 - They have broadcast one of the new gossip messages defined in this document.
 
@@ -306,7 +310,7 @@ These extensions only apply if the `option_taproot` channel type was set in the
    1. type: 0 (`announcement_node_pubnonce`)
    2. data:
       * [`66*byte`: `public_nonce`]
-   3. type: 1 (`announcement_bitcoin_pubnonce`)
+   3. type: 2 (`announcement_bitcoin_pubnonce`)
    4. data:
       * [`66*byte`: `public_nonce`]
    
@@ -356,10 +360,10 @@ allow the announcement of the channel to the rest of the network.
    1. type: 0 (`channel_id`)
    2. data:
        * [`channel_id`:`channel_id`]
-   3. type: 1 (`short_channel_id`)
+   3. type: 2 (`short_channel_id`)
    4. data:
        * [`short_channel_id`:`short_channel_id`]
-   5. type: 2 (`partial_signature`)
+   5. type: 4 (`partial_signature`)
    6. data:
        * [`partial_signature`:`partial_signature`]
 
@@ -372,14 +376,12 @@ The requirements are similar to the ones defined for the legacy
 A node:
 - if the `open_channel` message has the `announce_channel` bit set AND a 
   `shutdown` message has not been sent:
-  - MUST send the `announcement_signatures_2` message.
-    - MUST NOT send `announcement_signatures_2` messages until `channel_ready` 
+  - MUST send the `announcement_signatures_2` message once `channel_ready`
       has been sent and received AND the funding transaction has at least six 
       confirmations.
-  - MUST set the `partial_signature` field to the 32-byte `s` value of the
-    partial signature calculated as described
-    in [Partial Signature Calculation](#partial-signature-calculation). The
-    message to be signed is
+  - MUST set the `partial_signature` field to the 32-byte `partial_sig` value of
+    the partial signature calculated as described in [Partial Signature 
+    Calculation](#partial-signature-calculation). The message to be signed is
     `MsgHash("channel_announcement", "announcement_sig", m)` where `m` is the
     serialisation of the `channel_announcement_2` message excluding the
     `announcement_sig` field (see the
@@ -433,38 +435,39 @@ channel.
    1. type: 0 (`announcement_sig`)
    2. data:
         * [`bip340_sig`:`bip340_sig`]
-   3. type: 1 (`features`)
+   3. type: 1 (`chain_hash`)
    4. data:
-        * [`...*byte`: `features`]
-   5. type: 2 (`chain_hash`)
+       * [`chain_hash`:`chain_hash`]
+   5. type: 2 (`features`)
    6. data:
-        * [`chain_hash`:`chain_hash`]
-   7. type: 3 (`short_channel_id`)
+        * [`...*byte`: `features`]
+   7. type: 4 (`short_channel_id`)
    8. data:
         * [`short_channel_id`:`short_channel_id`]
-   9. type: 4 (`node_id_1`)
+   9. type: 6 (`node_id_1`)
    10. data:
         * [`point`:`point`]
-   11. type: 5 (`node_id_2`)
+   11. type: 8 (`node_id_2`)
    12. data:
        * [`point`:`point`]
-   13. type: 6 (`bitcoin_key_1`)
+   13. type: 3 (`bitcoin_key_1`)
    14. data:
        * [`point`:`point`]
-   15. type: 7 (`bitcoin_key_2`)
+   15. type: 5 (`bitcoin_key_2`)
    16. data:
+       * [`point`:`point`]
+   17. type: 7 (`tap_tweak`)
+   18. data:
        * [`point`:`point`]
 
 ### Requirements
 
 The origin node:
 
-- MUST include types 0-7.
-- MUST set `chain_hash` to the 32-byte hash that uniquely identifies the chain
-  that the channel was opened within:
-    - for the _Bitcoin blockchain_:
-        - MUST set `chain_hash` value (encoded in hex) equal
-          to `6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000`.
+- If the chain being referred to is not the Bitcoin blockchain:
+  - MUST set `chain_hash` to the 32-byte hash that uniquely identifies the chain
+    that the channel was opened within:
+- otherwise, MUST not set `chain_has` as the _Bitcoin blockchain_ is assumed. 
 - MUST set `short_channel_id` to refer to the confirmed funding transaction, as
   specified in [BOLT #2](02-peer-protocol.md#the-channel_ready-message).
     - Note: the corresponding output MUST be a P2TR, as described
@@ -483,7 +486,7 @@ The origin node:
 
 The receiving node:
 
-- If types 0-7 are not present:
+- If any even typed messages are not present:
     - SHOULD send a `warning`.
     - MAY close the connection.
     - MUST ignore the message.
@@ -491,7 +494,7 @@ The receiving node:
   `announcement_sig` as per [BIP 340][bip-340-verify].
 - if there is an unknown even bit in the `features` field:
     - MUST NOT attempt to route messages through the channel.
-- if the `short_channel_id`'s output does NOT correspond to a P2WSH (using
+- if the `short_channel_id`'s output does NOT correspond to a P2TR (using
   `bitcoin_key_1` and `bitcoin_key_2`, as specified in
   [BOLT #3](03-transactions.md#funding-transaction-output)) OR the output is
   spent:
@@ -569,31 +572,31 @@ is now a block height and that the message is purely TLV based.
     1. type: 0 (`announcement_sig`)
     2. data:
         * [`bip340_sig`:`bip340_sig`]
-    3. type: 1 (`features`)
+    3. type: 2 (`features`)
     4. data:
         * [`...*byte`: `features`]
-    5. type: 2 (`timestamp`)
+    5. type: 4 (`block_height`)
     6. data:
         * [`u32`: `block_height`]
-    7. type: 3 (`node_ID`)
+    7. type: 6 (`node_ID`)
     8. data: 
         * [`point`:`node_id`]
-    9. type: 4 (`color`)
+    9. type: 1 (`color`)
     10. data:
          * [`rgb_color`:`rgb_color`]
-    11. type: 5 (`alias`)
+    11. type: 3 (`alias`)
     12. data:
          * [`...*utf8`:`alias`]
-    13. type: 6 (`ipv4_addrs`)
+    13. type: 5 (`ipv4_addrs`)
     14. data: 
          * [`...*ipv4_addr`: `ipv4_addresses`]  
     15. type: 7 (`ipv6_addrs`)
     16. data:
          * [`...*ipv6_addr`: `ipv6_addresses`]
-    17. type: 8 (`tor_v3_addrs`)
+    17. type: 9 (`tor_v3_addrs`)
     18. data: 
          * [`...*tor_v3_addr`: `tor_v3_addresses`]
-    19. type: 9 (`dns_hostname`)
+    19. type: 11 (`dns_hostname`)
     20. data:
          * [`dns_hostname`: `dns_hostname`]
 
@@ -638,7 +641,6 @@ exceed 255 bytes.
 
 The sender:
 
-- MUST set types 0-3 (inclusive)
 - MUST set `announcement_sig` to a valid [BIP340][bip-340] signature for the
   `node_id` key. The message to be signed is
   `MsgHash("node_announcement_2", "announcement_sig", m)` where `m` is the
@@ -648,7 +650,7 @@ The sender:
 - MAY set `color` and `alias` to customise appearance in maps and graphs.
 - If the node sets the `alias`:
   - MUST use 32 utf8 characters or less. 
-- MUST set `timestamp` to be greater than that of any previous
+- MUST set `block_height` to be greater than that of any previous
   `node_announcement_2` it has previously created.
     - MUST set it to a block height less than the latest block's height but no
       more than 1440 lower.
@@ -668,7 +670,7 @@ The sender:
     
 The receiving node:
 
-- If any type between 0-3 (inclusive) are missing:
+- If any type between even-typed values are missing:
     - SHOULD send a `warning`.
     - MAY close the connection.
     - MUST ignore the message.
@@ -693,11 +695,11 @@ The receiving node:
 - if `port` is equal to 0 for any `ipv6_addr` OR `ipv4_addr` OR `hostname`:
     - SHOULD ignore that address.
 - if `node_id` is NOT previously known from a `channel_announcement` OR 
-  `channel_announcement_2` message, OR if `timestamp` is NOT greater than the 
+  `channel_announcement_2` message, OR if `blockheight` is NOT greater than the 
   last-received `node_announcement_2` from this `node_id`:
       - SHOULD ignore the message.
 - otherwise:
-    - if `timestamp` is greater than the last-received `node_announcement_2` 
+    - if `block_height` is greater than the last-received `node_announcement_2` 
       from this `node_id`:
           - SHOULD queue the message for rebroadcasting.
 - MAY use `rgb_color` AND `alias` to reference nodes in interfaces.
@@ -746,28 +748,28 @@ the last HTLC in the route, are provided in the payment request
     1. type: 0 (`update_sig`)
     2. data:
         * [`bip340_sig`:`bip340_sig`]
-    3. type: 2 (`chain_hash`)
+    3. type: 1 (`chain_hash`)
     4. data:
         * [`chain_hash`:`chain_hash`]
-    5. type: 2 (`timestamp`)
+    5. type: 2 (`block_height`)
     6. data:
         * [`u32`: `block_height`]
-    7. type: 5 (`channel_flags`)
+    7. type: 4 (`channel_flags`)
     8. data:
        * [`...*byte`, `channel_flags`]
     9. type: 6 (`cltv_expiry_delta`)
     10. data:
         * [`tu32`, `cltv_expiry_delta`]
-    11. type: 7 (`htlc_min_msat`)
+    11. type: 8 (`htlc_min_msat`)
     12. data: 
         * [`tu64`, `htlc_min_msat`]
     13. type: 10 (`htlc_max_msat`)
     14. data:
        * [`tu64`, `htlc_max_msat`]
-    15. type: 8 (`fee_base_msat`)
+    15. type: 12 (`fee_base_msat`)
     16. data:
        * [`tu32`, `fee_base_msat`]
-    17. type: 9 (`fee_prop_millionths`)
+    17. type: 14 (`fee_prop_millionths`)
     18. data:
       * [`tu32`, `fee_prop_millionths`]
 
@@ -788,6 +790,10 @@ The `node_id` for the signature verification is taken from the corresponding
 ### Requirements
 
 The origin node:
+- If the chain being referred to is not the Bitcoin blockchain:
+    - MUST set `chain_hash` to the 32-byte hash that uniquely identifies the 
+      chain that the channel was opened within:
+- otherwise, MUST not set `chain_hash` as the _Bitcoin blockchain_ is assumed.
 - MUST NOT send `channel_update_2` before `channel_ready` has been received. 
 - MUST NOT send `channel_update_2` for legacy (non-taproot) channels.
 - MAY create a `channel_update_2` to communicate the channel parameters to the
@@ -823,10 +829,10 @@ The origin node:
   settlement).
     - MAY send a subsequent `channel_update_2` with the `disable` bit set to 0
       to re-enable the channel.
-- MUST set `timestamp` greater or equal to the block height that the channel's
-  funding transaction was mined in AND to greater than any previously-sent
-  `channel_update_2` for this `short_channel_id` AND no less than 1440 blocks 
-  below the current best block height . 
+- MUST set `block_height` greater or equal to the block height that the 
+  channel's funding transaction was mined in AND to greater than any 
+  previously-sent `channel_update_2` for this `short_channel_id` AND no less 
+  than 1440 blocks below the current best block height . 
 - MUST set `cltv_expiry_delta` to the number of blocks it will subtract from
   an incoming HTLC's `cltv_expiry`.
 - MUST set `htlc_minimum_msat` to the minimum HTLC value (in millisatoshi)
@@ -855,21 +861,21 @@ The receiving node:
 - if the specified `chain_hash` value is unknown (meaning it isn't active on
   the specified chain):
     - MUST ignore the channel update.
-- if the `timestamp` is equal to the last-received `channel_update_2` for this
-  `short_channel_id` AND `node_id`:
-    - if the fields below `timestamp` differ:
+- if the `block_height` is equal to the last-received `channel_update_2` for 
+  this `short_channel_id` AND `node_id`:
+    - if the fields below `block_height` differ:
         - MAY blacklist this `node_id`.
         - MAY forget all channels associated with it.
-    - if the fields below `timestamp` are equal:
+    - if the fields below `block_height` are equal:
         - SHOULD ignore this message
-- if `timestamp` is lower than that of the last-received
+- if `block_height` is lower than that of the last-received
   `channel_update_2` for this `short_channel_id` AND for `node_id`:
     - SHOULD ignore the message.
 - otherwise:
-    - if the `timestamp` is a block height greater than the current best block
+    - if the `block_height` is a block height greater than the current best block
       height:
       - MAY discard the `channel_update_2`.
-    - if the `timestamp` block height is more than 1440 blocks less than the 
+    - if the `block_height` block height is more than 1440 blocks less than the 
       current best block height:
         - MAY discard the `channel_update_2`.
     - otherwise:
