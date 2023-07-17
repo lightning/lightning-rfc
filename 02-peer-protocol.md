@@ -36,6 +36,7 @@ operation, and closing.
     * [Channel Close](#channel-close)
       * [Closing Initiation: `shutdown`](#closing-initiation-shutdown)
       * [Closing Negotiation: `closing_signed`](#closing-negotiation-closing_signed)
+      * [Closing Negotiation: `closing_complete` and `closing_sig`](#closing-negotiation-closing_complete-and-closing_sig)
     * [Normal Operation](#normal-operation)
       * [Forwarding HTLCs](#forwarding-htlcs)
       * [`cltv_expiry_delta` Selection](#cltv_expiry_delta-selection)
@@ -1521,10 +1522,24 @@ Closing happens in two stages:
         |       |<-(?)-- closing_signed  Fn----|       |
         +-------+                              +-------+
 
+        +-------+                              +-------+
+        |       |--(1)-----  shutdown  ------->|       |
+        |       |<-(2)-----  shutdown  --------|       |
+        |       |                              |       |
+        |       | <complete all pending HTLCs> |       |
+        |   A   |                 ...          |   B   |
+        |       |                              |       |
+        |       |--(3a)- closing_complete Fee->|       |
+        |       |<-(3b)- closing_complete Fee--|       |
+        |       |<-(4a)- closing_sig ----------|       |
+        |       |--(4b)- closing_sig --------->|       |
+        +-------+                              +-------+
+
 ### Closing Initiation: `shutdown`
 
 Either node (or both) can send a `shutdown` message to initiate closing,
-along with the `scriptpubkey` it wants to be paid to.
+along with the `scriptpubkey` it wants to be paid to.  This can be
+sent multiple times.
 
 1. type: 38 (`shutdown`)
 2. data:
@@ -1712,6 +1727,82 @@ policies (e.g. when using a non-segwit shutdown script for an output below 546
 satoshis, which is possible if `dust_limit_satoshis` is below 546 satoshis).
 No funds are at risk when that happens, but the channel must be force-closed as
 the closing transaction will likely never reach miners.
+
+### Closing Negotiation: `closing_complete` and `closing_sig`
+
+Once shutdown is complete, the channel is empty of HTLCs, there are no commitments
+for which a revocation is owed, and all updates are included on both commitments,
+the final current commitment transactions will have no HTLCs.
+
+Each peer says what fee it will pay, and the other side simply signs that transaction.  The only complexity comes from allowing each side to omit its own output should it be uneconomic.
+
+This process will be repeated every time a `shutdown` message is received, which allows re-negotiation.
+
+1. type: 40 (`closing_complete`)
+2. data:
+   * [`channel_id`:`channel_id`]
+   * [`u64`:`fee_satoshis`]
+   * [`u8`: `has_closer_output`]
+   * [`signature`:`signature_with_closee_output`]
+   * [`signature`:`signature_without_closee_output`]
+
+1. type: 41 (`closing_sig`)
+2. data:
+   * [`channel_id`:`channel_id`]
+   * [`u8`: `has_closee_output`]
+   * [`signature`:`signature`]
+
+#### Requirements
+
+Note: the details and requirements for the transaction being signed are in [BOLT 3](03-transactions.md#closing-transaction)).
+
+Both nodes:
+  - After a `shutdown` has been received, AND no HTLCs remain in either commitment transaction:
+    - SHOULD send a `closing_complete` message.
+
+The sender of `closing_complete` (aka. "the closer"):
+  - MUST set `fee_satoshis` to a fee less than or equal to its outstanding balance, rounded down to whole satoshis.
+  - SHOULD set `has_closer_output` to 0 if it considers its own remaining balance to be uneconomic.
+  - Otherwise MUST set `has_closer_output` to 1.
+  - If it sets `has_closer_output` to 1:
+    - MUST set `signature_with_closee_output` to a valid signature of a transaction with both closer and closee outputs.
+	- MUST set `signature_without_closee_output` to a valid signature of a transaction with only a closer output.
+  - Otherwise: (`has_closer_output` is 0):
+    - MUST set `signature_with_closee_output` to a valid signature of a transaction with only the closee output.
+	- MUST set `signature_without_closee_output` to a valid signature of a transaction with only the null output as described in [BOLT 3](03-transactions.md#closing-transaction).
+
+The receiver of `closing_complete` (aka. "the closee"):
+  - if either `signature_with_closee_output` or `signature_without_closee_output` is not valid for the closing transactions specified in [BOLT #3](03-transactions.md#closing-transaction) OR non-compliant with LOW-S-standard rule<sup>[LOWS](https://github.com/bitcoin/bitcoin/pull/6769)</sup>:
+    - MUST either send a `warning` and close the connection, or send an `error` and fail the channel.
+  - Otherwise:
+    - MUST select one of the signatures (and thus, transactions) to respond to.
+	- MUST sign and broadcast that transaction.
+    - MUST send `closing_sig`.
+
+The sender of `closing_sig`:
+  - if it selected `signature_with_closee_output` to broadcast:
+    - MUST set `has_closee_output` to 1.
+	- MUST set `signature` to a valid signature on that transaction.
+  - otherwise (it selected `signature_without_closee_output`):
+    - MUST set `has_closee_output` to 0.
+	- MUST set `signature` to a valid signature on that transaction.
+
+The receiver of `closing_sig`:
+  - MUST broadcast the transaction indicated by `has_closee_output`.
+
+### Rationale
+
+The close protocol is designed to avoid any failure scenarios caused by fee disagreement, since each side offers to pay its own desired fee.
+
+Multiple signatures are given, so each side can choose whether it wants to include its own output.  In the case of large fees and tiny channels, where neither side wants its output, the use of an OP_RETURN simply cleans up the dangling unspent transaction output.  This is expected to be extremely rare.
+
+Note that there is usually no reason to pay a high fee for rapid processing, since an urgent child could pay the fee on the closing transactions' behalf.
+
+If the closer proposes a transaction which will not relay (either its own output is dust, or the fee rate it proposes is too low), it doesn't harm the closee to sign the transaction.
+
+Similarly, if the closer proposes a high fee, it doesn't harm the closee to sign the transaction, as the closer is paying.
+
+There's a slight game where each side would prefer the other side pay the fee, and proposes a minimal fee.  If neither side proposes a fee which will relay, the negotiation can occur again, or the final commitment transaction can be spent.  In practice, the opener has an incentive to offer a reasonable closing fee, as they would pay the fee for the commitment transaction, which also costs more to spend.
 
 ## Normal Operation
 

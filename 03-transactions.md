@@ -349,7 +349,9 @@ The witness script for the output is:
 
 To spend this via penalty, the remote node uses a witness stack `<revocationsig> 1`, and to collect the output, the local node uses an input with nSequence `to_self_delay` and a witness stack `<local_delayedsig> 0`.
 
-## Closing Transaction
+## Classic Closing Transaction
+
+This variant is used for `closing_signed` messages (i.e. where `option_simple_close` is not negotiated).
 
 Note that there are two possible variants for each node.
 
@@ -389,6 +391,46 @@ has been used.
 
 There will be at least one output, if the funding amount is greater
 than twice `dust_limit_satoshis`.
+
+## Closing Transaction
+
+This variant is used for `closing_complete` and `closing_sig` messages (i.e. where `option_simple_close` is negotiated).
+
+In this case, the node sending `closing_complete` ("the closer") pays the fees, and the sequence is set to 0xFFFFFFFD to allow RBF.  The outputs are ordered as detailed in [Transaction Output Ordering](#transaction-output-ordering).
+
+Two closing transactions are always produced: one `with_closee_output` one `without_closee_output` (the non-closer chooses which to accept).  `closing_complete` contains `has_closer_output` to indicate whether the closer's output is in the transactions.
+
+* version: 2
+* locktime: 0
+* txin count: 1
+   * `txin[0]` outpoint: `txid` and `output_index` from `funding_created` message
+   * `txin[0]` sequence: 0xFFFFFFFD
+   * `txin[0]` script bytes: 0
+   * `txin[0]` witness: `0 <signature_for_pubkey1> <signature_for_pubkey2>`
+
+* txout count: 1 or 2 of the following
+  * The closer output:
+    * `txout` amount: the final balance for the closer, minus `closing_complete` `fee_satoshis`, rounded down to whole satoshis.
+	* `txout` script: as specified in that closer's `scriptpubkey` in its `shutdown` message
+  * The closee output:
+    * `txout` amount: the final balance for the closer, rounded down to whole satoshis.
+	* `txout` script: as specified in that closee's `scriptpubkey` in its `shutdown` message
+  * The null output:
+    * `txout` amount: 0
+	* `txout` script: `feeeee` `OP_RETURN` (102 101 101 101 101 101 106).
+
+### Requirements
+
+Each node offering a signature:
+  - MUST round each output down to whole satoshis.
+  - MUST subtract the fee given by `fee_satoshis` from the closer output.
+
+
+### Rationale
+
+The case where both sides omit their outputs due to a de-minimus channel is never expected to happen, however it is
+documented here for completeness, and serves to avoid an polluting the unspent outputs.  Unfortunately, the transaction
+has to be at least 65 bytes to propagate, so the `OP_RETURN` includes padding.
 
 ## Fees
 
