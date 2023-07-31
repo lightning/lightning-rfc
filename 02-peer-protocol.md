@@ -1761,6 +1761,7 @@ Both nodes:
 
 The sender of `closing_complete` (aka. "the closer"):
   - MUST set `fee_satoshis` to a fee less than or equal to its outstanding balance, rounded down to whole satoshis.
+  - MUST set `has_closee_output` to 0 if it would be dust (< 540 satoshis for P2SH, < 330 satoshis for P2WSH and P2TR)
   - SHOULD set `has_closer_output` to 0 if it considers its own remaining balance to be uneconomic.
   - Otherwise MUST set `has_closer_output` to 1.
   - If it sets `has_closer_output` to 1:
@@ -1771,6 +1772,8 @@ The sender of `closing_complete` (aka. "the closer"):
 	- MUST set `signature_without_closee_output` to a valid signature of a transaction with only the null output as described in [BOLT 3](03-transactions.md#closing-transaction).
 
 The receiver of `closing_complete` (aka. "the closee"):
+  - If `has_closee_output` is 1 and the closer's output would be dust (< 540 satoshis for P2SH, < 330 satoshis for P2WSH and P2TR):
+    - MUST either send a `warning` and close the connection, or send an `error` and fail the channel.
   - if either `signature_with_closee_output` or `signature_without_closee_output` is not valid for the closing transactions specified in [BOLT #3](03-transactions.md#closing-transaction) OR non-compliant with LOW-S-standard rule<sup>[LOWS](https://github.com/bitcoin/bitcoin/pull/6769)</sup>:
     - MUST either send a `warning` and close the connection, or send an `error` and fail the channel.
   - Otherwise:
