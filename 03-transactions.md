@@ -398,7 +398,7 @@ This variant is used for `closing_complete` and `closing_sig` messages (i.e. whe
 
 In this case, the node sending `closing_complete` ("the closer") pays the fees, and the sequence is set to 0xFFFFFFFD to allow RBF.  The outputs are ordered as detailed in [Transaction Output Ordering](#transaction-output-ordering).
 
-Two closing transactions are always produced: one `with_closee_output` one `without_closee_output` (the non-closer chooses which to accept).  `closing_complete` contains `has_closer_output` to indicate whether the closer's output is in the transactions.
+The side with lesser funds can opt to omit their own output.
 
 * version: 2
 * locktime: 0
@@ -408,16 +408,13 @@ Two closing transactions are always produced: one `with_closee_output` one `with
    * `txin[0]` script bytes: 0
    * `txin[0]` witness: `0 <signature_for_pubkey1> <signature_for_pubkey2>`
 
-* txout count: 1 or 2 of the following
+* txout count: 1 or 2
   * The closer output:
     * `txout` amount: the final balance for the closer, minus `closing_complete` `fee_satoshis`, rounded down to whole satoshis.
 	* `txout` script: as specified in that closer's `scriptpubkey` in its `shutdown` message
   * The closee output:
-    * `txout` amount: the final balance for the closer, rounded down to whole satoshis.
+    * `txout` amount: the final balance for the closee, rounded down to whole satoshis.
 	* `txout` script: as specified in that closee's `scriptpubkey` in its `shutdown` message
-  * The null output:
-    * `txout` amount: 0
-	* `txout` script: `feeeee` `OP_RETURN` (102 101 101 101 101 101 106).
 
 ### Requirements
 

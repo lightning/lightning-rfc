@@ -1733,27 +1733,40 @@ Once shutdown is complete, the channel is empty of HTLCs, there are no commitmen
 for which a revocation is owed, and all updates are included on both commitments,
 the final current commitment transactions will have no HTLCs.
 
-Each peer says what fee it will pay, and the other side simply signs that transaction.  The only complexity comes from allowing each side to omit its own output should it be uneconomic.
+Each peer says what fee it will pay, and the other side simply signs that transaction.  The lesser-paid peer (if either is) can opt to omit their own output from the closing tx.
 
-This process will be repeated every time a `shutdown` message is received, which allows re-negotiation.
+This process will be repeated every time a `shutdown` message is received, which allows re-negotiation (and RBF).
 
 1. type: 40 (`closing_complete`)
 2. data:
    * [`channel_id`:`channel_id`]
    * [`u64`:`fee_satoshis`]
-   * [`u8`: `has_closer_output`]
-   * [`signature`:`signature_with_closee_output`]
-   * [`signature`:`signature_without_closee_output`]
+   * [`closing_tlvs`:`tlvs`]
+
+1. `tlv_stream`: `closing_tlvs`
+2. types:
+    1. type: 1 (`closer_no_closee`)
+    2. data:
+        * [`signature`:`sig`]
+    1. type: 2 (`no_closer_closee`)
+    2. data:
+        * [`signature`:`sig`]
+    1. type: 3 (`closer_and_closee`)
+    2. data:
+        * [`signature`:`sig`]
 
 1. type: 41 (`closing_sig`)
 2. data:
    * [`channel_id`:`channel_id`]
-   * [`u8`: `has_closee_output`]
-   * [`signature`:`signature`]
+   * [`closing_tlvs`:`tlvs`]
 
 #### Requirements
 
 Note: the details and requirements for the transaction being signed are in [BOLT 3](03-transactions.md#closing-transaction)).
+
+An output is *dust* if:
+- It is P2SH and the amount is < 540 satoshis
+- It is P2WSH or P2TR and the amount is < 330 satoshis
 
 Both nodes:
   - After a `shutdown` has been received, AND no HTLCs remain in either commitment transaction:
@@ -1761,46 +1774,65 @@ Both nodes:
 
 The sender of `closing_complete` (aka. "the closer"):
   - MUST set `fee_satoshis` to a fee less than or equal to its outstanding balance, rounded down to whole satoshis.
-  - MUST set `has_closee_output` to 0 if it would be dust (< 540 satoshis for P2SH, < 330 satoshis for P2WSH and P2TR)
-  - SHOULD set `has_closer_output` to 0 if it considers its own remaining balance to be uneconomic.
-  - Otherwise MUST set `has_closer_output` to 1.
-  - If it sets `has_closer_output` to 1:
-    - MUST set `signature_with_closee_output` to a valid signature of a transaction with both closer and closee outputs.
-	- MUST set `signature_without_closee_output` to a valid signature of a transaction with only a closer output.
-  - Otherwise: (`has_closer_output` is 0):
-    - MUST set `signature_with_closee_output` to a valid signature of a transaction with only the closee output.
-	- MUST set `signature_without_closee_output` to a valid signature of a transaction with only the null output as described in [BOLT 3](03-transactions.md#closing-transaction).
+  - MUST set `fee_satoshis` so that at least one output is not dust.
+  - MUST use the last send and received `shutdown` `scriptpubkey` to generate the closing transaction specified in [BOLT #3](03-transactions.md#closing-transaction).
+  - If it sets `signature` fields, MUST set them as valid signature using its `funding_pubkey` of:
+    - `closer_noclosee`: closing transaction with only the local ("closer") output.
+    - `no_closer_closee`: closing transaction with only the remote ("closee") output.
+    - `closer_and_closee`: closing transaction with both the closer and closee outputs.
+  - If the local outstanding balance (in millisatoshi) is less than the remote outstanding balance:
+    - MUST NOT set `closer_no_closee`.
+    - MUST set exactly one of `no_closer_closee` or `closer_and_closee`.
+    - MUST set `no_closer_closee` if the local output amount is dust.
+    - MAY set `no_closer_closee` if it considers the closee output amount uneconomic.
+  - Otherwise (not lesser amount, cannot remove own output):
+    - MUST NOT set `no_closer_closee`.
+    - MUST set both `closer_no_closee` and `closer_and_closee`.
 
 The receiver of `closing_complete` (aka. "the closee"):
-  - If `has_closee_output` is 1 and the closer's output would be dust (< 540 satoshis for P2SH, < 330 satoshis for P2WSH and P2TR):
+  - If `fee_satoshis` is greater than the closer's outstanding balance:
     - MUST either send a `warning` and close the connection, or send an `error` and fail the channel.
-  - if either `signature_with_closee_output` or `signature_without_closee_output` is not valid for the closing transactions specified in [BOLT #3](03-transactions.md#closing-transaction) OR non-compliant with LOW-S-standard rule<sup>[LOWS](https://github.com/bitcoin/bitcoin/pull/6769)</sup>:
+  - Select a signature for validation:
+    - if the local output amount is dust:
+      - MUST use `closer_no_closee`.
+    - otherwise, if it considers the closee output amount uneconomic:
+      - MUST use `closer_no_closee`.
+    - otherwise, if `closer_and_closee` is present:
+      - MUST use `closer_and_closee`.
+    - otherwise:
+      - MUST use `no_closer_closee`.
+  - If the selected signature field does not exist:
     - MUST either send a `warning` and close the connection, or send an `error` and fail the channel.
-  - Otherwise:
-    - MUST select one of the signatures (and thus, transactions) to respond to.
-	- MUST sign and broadcast that transaction.
-    - MUST send `closing_sig`.
-
-The sender of `closing_sig`:
-  - if it selected `signature_with_closee_output` to broadcast:
-    - MUST set `has_closee_output` to 1.
-	- MUST set `signature` to a valid signature on that transaction.
-  - otherwise (it selected `signature_without_closee_output`):
-    - MUST set `has_closee_output` to 0.
-	- MUST set `signature` to a valid signature on that transaction.
+  - If the signature field is not valid for the corresponding closing transaction specified in [BOLT #3](03-transactions.md#closing-transaction):
+    - MUST ignore `closing_complete`.
+  - If the signature field is non-compliant with LOW-S-standard rule<sup>[LOWS](https://github.com/bitcoin/bitcoin/pull/6769)</sup>:
+    - MUST either send a `warning` and close the connection, or send an `error` and fail the channel.
+  - MUST sign and broadcast the corresponding closing transaction.
+  - MUST send `closing_sig` with a single valid signature in the same tlv field as the `closing_complete`.
 
 The receiver of `closing_sig`:
-  - MUST broadcast the transaction indicated by `has_closee_output`.
+  - if `tlvs` does not contain exactly one signature:
+    - MUST either send a `warning` and close the connection, or send an `error` and fail the channel.
+  - if `tlvs` does not contain one of the tlv fields sent in `closing_complete`:
+    - MUST ignore `closing_complete`.
+  - if the signature field is not valid for the corresponding closing transaction specified in [BOLT #3](03-transactions.md#closing-transaction):
+    - MUST ignore `closing_complete`.
+  - of the signature field is non-compliant with LOW-S-standard rule<sup>[LOWS](https://github.com/bitcoin/bitcoin/pull/6769)</sup>:
+    - MUST either send a `warning` and close the connection, or send an `error` and fail the channel.
+  - otherwise:
+    - MUST sign and broadcast the corrsponding closing transaction.
 
 ### Rationale
 
 The close protocol is designed to avoid any failure scenarios caused by fee disagreement, since each side offers to pay its own desired fee.
 
-Multiple signatures are given, so each side can choose whether it wants to include its own output.  In the case of large fees and tiny channels, where neither side wants its output, the use of an OP_RETURN simply cleans up the dangling unspent transaction output.  This is expected to be extremely rare.
+If one side has less funds than the other, it may choose to omit its own output, and in this case dust MUST be omitted, to ensure the resulting transaction can be broadcast.
 
 Note that there is usually no reason to pay a high fee for rapid processing, since an urgent child could pay the fee on the closing transactions' behalf.
 
-If the closer proposes a transaction which will not relay (either its own output is dust, or the fee rate it proposes is too low), it doesn't harm the closee to sign the transaction.
+However, sending a new `shutdown` message overrides previous ones, so you can negotiated again (even changing the output address) if you want: in this case there's a race where you could receive a `closing_complete` for the previous output address, and the signature won't validate.  In this case, ignoring the `closing_complete` is the correct behaviour, as the new `shutdown` will trigger a new `closing_complete` with the correct signature.  This assumption that we only remember the last-sent of any message is why so many cases of bad signatures are simply ignored.
+
+If the closer proposes a transaction which will not relay (an output is dust, or the fee rate it proposes is too low), it doesn't harm the closee to sign the transaction.
 
 Similarly, if the closer proposes a high fee, it doesn't harm the closee to sign the transaction, as the closer is paying.
 
