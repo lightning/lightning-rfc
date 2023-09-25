@@ -1731,6 +1731,8 @@ satoshis, which is possible if `dust_limit_satoshis` is below 546 satoshis).
 No funds are at risk when that happens, but the channel must be force-closed as
 the closing transaction will likely never reach miners.
 
+`OP_RETURN` is only standard if followed by PUSH opcodes, and the total script is 83 bytes or less.  We are slightly stricter, to only allow a single PUSH, but there are two forms in script: one which pushes up to 75 bytes, and a longer one (OP_PUSHDATA1) which is needed for 76-80 bytes.
+
 ### Closing Negotiation: `closing_complete` and `closing_sig`
 
 Once shutdown is complete, the channel is empty of HTLCs, there are no commitments
@@ -1768,10 +1770,7 @@ This process will be repeated every time a `shutdown` message is received, which
 
 Note: the details and requirements for the transaction being signed are in [BOLT 3](03-transactions.md#closing-transaction)).
 
-An output is *dust* if:
-- It is P2SH and the amount is < 540 satoshis
-- It is P2WSH or P2TR and the amount is < 330 satoshis
-- (No OP_RETURN of any amount is dust)
+An output is *dust* if the amount is less than the [Bitcoin Core Dust Thresholds](03-transactions.md#dust-limits).
 
 Both nodes:
   - After a `shutdown` has been received, AND no HTLCs remain in either commitment transaction:
@@ -1782,17 +1781,21 @@ The sender of `closing_complete` (aka. "the closer"):
   - MUST set `fee_satoshis` so that at least one output is not dust.
   - MUST use the last send and received `shutdown` `scriptpubkey` to generate the closing transaction specified in [BOLT #3](03-transactions.md#closing-transaction).
   - If it sets `signature` fields, MUST set them as valid signature using its `funding_pubkey` of:
-    - `closer_noclosee`: closing transaction with only the local ("closer") output.
+    - `closer_no_closee`: closing transaction with only the local ("closer") output.
     - `no_closer_closee`: closing transaction with only the remote ("closee") output.
     - `closer_and_closee`: closing transaction with both the closer and closee outputs.
   - If the local outstanding balance (in millisatoshi) is less than the remote outstanding balance:
     - MUST NOT set `closer_no_closee`.
     - MUST set exactly one of `no_closer_closee` or `closer_and_closee`.
     - MUST set `no_closer_closee` if the local output amount is dust.
-    - MAY set `no_closer_closee` if it considers the closee output amount uneconomic AND its `scriptpubkey` is not `OP_RETURN`.
+    - MAY set `no_closer_closee` if it considers the local output amount uneconomic AND its `scriptpubkey` is not `OP_RETURN`.
   - Otherwise (not lesser amount, cannot remove own output):
     - MUST NOT set `no_closer_closee`.
-    - MUST set both `closer_no_closee` and `closer_and_closee`.
+    - If the closee's output amount is dust:
+      - MUST set `closer_no_closee`.
+      - SHOULD NOT set `closer_and_closee`.
+    - Otherwise:
+      - MUST set both `closer_no_closee` and `closer_and_closee`.
 
 The receiver of `closing_complete` (aka. "the closee"):
   - If `fee_satoshis` is greater than the closer's outstanding balance:
@@ -1819,10 +1822,10 @@ The receiver of `closing_sig`:
   - if `tlvs` does not contain exactly one signature:
     - MUST either send a `warning` and close the connection, or send an `error` and fail the channel.
   - if `tlvs` does not contain one of the tlv fields sent in `closing_complete`:
-    - MUST ignore `closing_complete`.
+    - MUST ignore `closing_sig`.
   - if the signature field is not valid for the corresponding closing transaction specified in [BOLT #3](03-transactions.md#closing-transaction):
     - MUST ignore `closing_complete`.
-  - of the signature field is non-compliant with LOW-S-standard rule<sup>[LOWS](https://github.com/bitcoin/bitcoin/pull/6769)</sup>:
+  - if the signature field is non-compliant with LOW-S-standard rule<sup>[LOWS](https://github.com/bitcoin/bitcoin/pull/6769)</sup>:
     - MUST either send a `warning` and close the connection, or send an `error` and fail the channel.
   - otherwise:
     - MUST sign and broadcast the corrsponding closing transaction.
@@ -1833,11 +1836,11 @@ The close protocol is designed to avoid any failure scenarios caused by fee disa
 
 If one side has less funds than the other, it may choose to omit its own output, and in this case dust MUST be omitted, to ensure the resulting transaction can be broadcast.
 
-The corner case where fees are so high that both outputs are dust is addressed in two ways: paying a low fee to avoid the problem, or using an OP_RETURN (which is nver "dust").
+The corner case where fees are so high that both outputs are dust is addressed in two ways: paying a low fee to avoid the problem, or using an OP_RETURN (which is never "dust").
 
 Note that there is usually no reason to pay a high fee for rapid processing, since an urgent child could pay the fee on the closing transactions' behalf.
 
-However, sending a new `shutdown` message overrides previous ones, so you can negotiated again (even changing the output address) if you want: in this case there's a race where you could receive a `closing_complete` for the previous output address, and the signature won't validate.  In this case, ignoring the `closing_complete` is the correct behaviour, as the new `shutdown` will trigger a new `closing_complete` with the correct signature.  This assumption that we only remember the last-sent of any message is why so many cases of bad signatures are simply ignored.
+However, sending a new `shutdown` message overrides previous ones, so you can negotiate again (even changing the output address) if you want: in this case there's a race where you could receive a `closing_complete` for the previous output address, and the signature won't validate.  In this case, ignoring the `closing_complete` is the correct behaviour, as the new `shutdown` will trigger a new `closing_complete` with the correct signature.  This assumption that we only remember the last-sent of any message is why so many cases of bad signatures are simply ignored.
 
 If the closer proposes a transaction which will not relay (an output is dust, or the fee rate it proposes is too low), it doesn't harm the closee to sign the transaction.
 
