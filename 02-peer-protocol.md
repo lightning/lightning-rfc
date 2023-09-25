@@ -1569,6 +1569,10 @@ A sending node:
     3. if (and only if) `option_shutdown_anysegwit` is negotiated:
       * `OP_1` through `OP_16` inclusive, followed by a single push of 2 to 40 bytes
         (witness program versions 1 through 16)
+    4. if (and only if) `option_simple_close` is negotiated:
+      * `OP_RETURN` followed by one of:
+        * `6` to `75` inclusive followed by exactly that many bytes
+        * `76` followed by `76` to `80` followed by exactly that many bytes
 
 A receiving node:
   - if it hasn't received a `funding_signed` (if it is a funder) or a `funding_created` (if it is a fundee):
@@ -1767,6 +1771,7 @@ Note: the details and requirements for the transaction being signed are in [BOLT
 An output is *dust* if:
 - It is P2SH and the amount is < 540 satoshis
 - It is P2WSH or P2TR and the amount is < 330 satoshis
+- (No OP_RETURN of any amount is dust)
 
 Both nodes:
   - After a `shutdown` has been received, AND no HTLCs remain in either commitment transaction:
@@ -1784,7 +1789,7 @@ The sender of `closing_complete` (aka. "the closer"):
     - MUST NOT set `closer_no_closee`.
     - MUST set exactly one of `no_closer_closee` or `closer_and_closee`.
     - MUST set `no_closer_closee` if the local output amount is dust.
-    - MAY set `no_closer_closee` if it considers the closee output amount uneconomic.
+    - MAY set `no_closer_closee` if it considers the closee output amount uneconomic AND its `scriptpubkey` is not `OP_RETURN`.
   - Otherwise (not lesser amount, cannot remove own output):
     - MUST NOT set `no_closer_closee`.
     - MUST set both `closer_no_closee` and `closer_and_closee`.
@@ -1795,7 +1800,7 @@ The receiver of `closing_complete` (aka. "the closee"):
   - Select a signature for validation:
     - if the local output amount is dust:
       - MUST use `closer_no_closee`.
-    - otherwise, if it considers the closee output amount uneconomic:
+    - otherwise, if it considers the closee output amount uneconomic AND its `scriptpubkey` is not `OP_RETURN`:
       - MUST use `closer_no_closee`.
     - otherwise, if `closer_and_closee` is present:
       - MUST use `closer_and_closee`.
@@ -1827,6 +1832,8 @@ The receiver of `closing_sig`:
 The close protocol is designed to avoid any failure scenarios caused by fee disagreement, since each side offers to pay its own desired fee.
 
 If one side has less funds than the other, it may choose to omit its own output, and in this case dust MUST be omitted, to ensure the resulting transaction can be broadcast.
+
+The corner case where fees are so high that both outputs are dust is addressed in two ways: paying a low fee to avoid the problem, or using an OP_RETURN (which is nver "dust").
 
 Note that there is usually no reason to pay a high fee for rapid processing, since an urgent child could pay the fee on the closing transactions' behalf.
 
