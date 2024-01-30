@@ -44,6 +44,7 @@ The Context column decodes as follows:
 | 22/23 | `option_anchors_zero_fee_htlc_tx` | Anchor commitment type with zero fee HTLC transactions    | IN       | `option_static_remotekey` | [BOLT #3][bolt03-htlc-tx], [lightning-dev][ml-sighash-single-harmful] |
 | 24/25 | `option_route_blinding`           | Node supports blinded paths                               | IN9      | `var_onion_optin`         | [BOLT #4](bolt04-route-blinding)                                      |
 | 26/27 | `option_shutdown_anysegwit`       | Future segwit versions allowed in `shutdown`              | IN       |                           | [BOLT #2][bolt02-shutdown]                                            |
+| 36/37 | `option_attributable_error`      | Can generate/relay attributable errors in `update_fail_htlc`       | IN9      |                   | [BOLT #4][bolt04-attributable-errors]   |
 | 38/39 | `option_onion_messages`           | Can forward onion messages                                | IN       |                           | [BOLT #7](04-onion-routing.md#onion-messages)                         |
 | 44/45 | `option_channel_type`             | Node supports the `channel_type` field in open/accept     | IN       |                           | [BOLT #2](02-peer-protocol.md#the-open_channel-message)               |
 | 46/47 | `option_scid_alias`               | Supply channel aliases for routing                        | IN       |                           | [BOLT #2][bolt02-channel-ready]                                       |
@@ -109,4 +110,5 @@ This work is licensed under a [Creative Commons Attribution 4.0 International Li
 [bolt07-query]: 07-routing-gossip.md#query-messages
 [bolt04-mpp]: 04-onion-routing.md#basic-multi-part-payments
 [bolt04-route-blinding]: 04-onion-routing.md#route-blinding
+[bolt04-attributable-errors]: 04-onion-routing.md
 [ml-sighash-single-harmful]: https://lists.linuxfoundation.org/pipermail/lightning-dev/2020-September/002796.html
