@@ -86,6 +86,7 @@ A node:
     - MUST send the `announcement_signatures` message.
       - MUST NOT send `announcement_signatures` until `channel_ready` has been sent and received.
       - MUST NOT send `announcement_signatures` until the funding transaction has enough confirmations to ensure that it won't be reorganized.
+      - MUST send the `announcement_signatures` message after `splice_locked` has been sent and received.
   - otherwise:
     - MUST NOT send the `announcement_signatures` message.
   - upon reconnection (once the above timing requirements have been met):
