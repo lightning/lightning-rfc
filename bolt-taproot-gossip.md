@@ -843,7 +843,9 @@ The receiving node:
 
 ### Query Messages
 
-TODO
+TODO: 
+    1. new first block height & block range fields in gossip_timestamp_range
+    2. add block-height query option (like timestamps query option)
 
 # Appendix A: Algorithms
 
