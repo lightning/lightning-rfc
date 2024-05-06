@@ -254,7 +254,7 @@ While the network is in the upgrade phase, the following suggestions apply:
 
 The following convenient types are defined:
 
-* `bip340_sig`: a 64-byte bitcoin Elliptic Curve Schnorr signature as
+* `bip340sig`: a 64-byte bitcoin Elliptic Curve Schnorr signature as
   per [BIP-340][bip-340].
 * `partial_signature`: a 32-byte partial MuSig2 signature as defined
   in [BIP-MuSig2][bip-musig2].
@@ -262,8 +262,6 @@ The following convenient types are defined:
 * `utf8`: a byte as part of a UTF-8 string. A writer MUST ensure an array of
   these is a valid UTF-8 string, a reader MAY reject any messages containing an
   array of these which is not a valid UTF-8 string.
-* `boolean_tlv`: a zero length TLV record. If the TLV is present then true is
-  implied, otherwise false is implied.
 
 ### Feature Bits
 
@@ -350,7 +348,7 @@ The recipient:
         - SHOULD ignore the message.
     - Otherwise:
         - MUST store the nonces so that they can be used for the partial signature
-          construction required for constructing the `announcement_signatures`
+          construction required for constructing the `announcement_signatures_2`
           message.
         - If it has not yet done so, SHOULD respond with its own `channel_ready`
           message with the nonce fields set.
@@ -390,7 +388,7 @@ A node:
     - MUST set the `partial_signature` field to the 32-byte `partial_sig` value
       of the partial signature calculated as described in [Partial Signature
       Calculation](#partial-signature-calculation). The message to be signed is
-      `MsgHash("channel_announcement", "announcement_sig", m)` where `m` is the
+      `MsgHash("channel_announcement", "signature", m)` where `m` is the
       serialisation of the `channel_announcement_2` message tlv stream (see the
       [`MsgHash`](#signature-message-construction) definition).
 - otherwise:
@@ -442,7 +440,7 @@ channel.
 
 1. type: 267 (`channel_announcement_2`)
 2. data:
-    * [`bip340_sig`:`announcement_signature`]
+    * [`bip340sig`:`signature`]
     * [`channel_announcement_2_tlvs`:`tlvs`]
 
 1. `tlv_stream`: `channel_announcement_2_tlvs`
@@ -494,9 +492,9 @@ Unlike the legacy `node_announcement` message, this message makes use of a
 BIP340 signature instead of an ECDSA one. This will allow nodes to be backed
 by multiple keys since MuSig2 can be used to construct the single signature.
 
-1. type 269
+1. type: 269 (`node_announcement_2`)
 2. data:
-    * [`bip340_sig`:`announcement_sig`]
+    * [`bip340sig`:`signature`]
     * [`node_announcement_2_tlvs`:`tlvs`]
 
 1. `tlv_stream`: `node_announcement_2_tlvs`
@@ -560,8 +558,8 @@ The following subtypes are defined:
 
 #### Message Field Descriptions
 
-- `bip340_sig` is the [BIP340][bip-340] signature for the `node_id` key. The
-  message to be signed is `MsgHash("node_announcement_2", "bip340_sig", m)`
+- `signature` is the [BIP340][bip-340] signature for the `node_id` key. The
+  message to be signed is `MsgHash("node_announcement_2", "signature", m)`
   where `m` is the serialised TLV stream (see the
   [`MsgHash`](#signature-message-construction) definition).
 - `features` is a bit vector with bits set according to [BOLT #9](09-features.md#assigned-features-flags)
@@ -594,11 +592,11 @@ ok to send both? if so - what if the info inside them differs?
 The sender:
 
 - MUST set TLV fields 0, 2 and 4.
-- MUST set `announcement_sig` to a valid [BIP340][bip-340] signature for the
+- MUST set `signature` to a valid [BIP340][bip-340] signature for the
   `node_id` key. The message to be signed is
-  `MsgHash("node_announcement_2", "announcement_sig", m)` where `m` is the
+  `MsgHash("node_announcement_2", "signature", m)` where `m` is the
   serialisation of the `node_announcement_2` message excluding the
-  `announcement_sig` field (see the
+  `signature` field (see the
   [`MsgHash`](#signature-message-construction) definition).
 - MAY set `color` and `alias` to customise appearance in maps and graphs.
 - If the node sets the `alias`:
@@ -635,7 +633,7 @@ The receiver:
     - SHOULD send a `warning`.
     - MAY close the connection.
     - MUST NOT process the message further.
-- if `announcement_sig` is NOT a valid [BIP340][bip-340] signature (using
+- if `signature` is NOT a valid [BIP340][bip-340] signature (using
   `node_id` over the message):
     - SHOULD send a `warning`.
     - MAY close the connection.
@@ -692,9 +690,9 @@ value for `amount_msat` and the minimal value for `cltv_expiry`, to be used for
 the last HTLC in the route, are provided in the payment request
 
 (see [BOLT #11][[bolt-11-tagged-fields]]).
-1. type 271
+1. type: 271 (`channel_update_2`)
 2. data:
-    * [`bip340_sig`:`bip340_sig`]
+    * [`bip340sig`:`signature`]
     * [`channel_update_2_tlvs`:`tlvs`]
 
 1. `tlv_stream`: `channel_update_2_tlvs`
@@ -711,9 +709,7 @@ the last HTLC in the route, are provided in the payment request
     1. type: 6 (`disable_flags`)
     2. data:
         * [`byte`:`disable_flags`]
-    1. type: 8 (`direction`)
-    2. data:
-        * [`boolean_tlv`:`direction`]
+    1. type: 8 (`second_peer`)
     1. type: 10 (`cltv_expiry_delta`)
     2. data:
         * [`u16`:`cltv_expiry_delta`]
@@ -731,16 +727,20 @@ the last HTLC in the route, are provided in the payment request
         * [`u32`:`fee_proportional_millionths`]
 
 
-The `disable_flags` bitfield is used to indicate that the channel is temporarily
-disabled. The following table specifies the meaning of the individual bits:
+The `disable_flags` bitfield is used to indicate that the channel is either
+temporarily or permanently disabled. The following table specifies the meaning 
+of the individual bits:
 
-| Bit Position  | Name       | Meaning                                         |
-|---------------|------------|-------------------------------------------------|
-| 0             | `incoming` | The node can't receive via this channel         |
-| 1             | `outgoing` | The node can't forward or send via this channel |
+| Bit Position | Name        | Meaning                                               |
+|--------------|-------------|-------------------------------------------------------|
+| 0            | `permanant` | The disable update is permanent (otherwise temporary) |
+| 1            | `incoming`  | The node can't receive via this channel               |
+| 2            | `outgoing`  | The node can't forward or send via this channel       |
 
 Both the `incoming` and `outgoing` bit can be set to indicate that the channel
 peer is offline.
+
+If the `permanant` bit is set, then the channel can be considered closed. 
 
 #### Message Field Descriptions
 
@@ -757,11 +757,10 @@ peer is offline.
 - The `disable` bit field can be used to advertise to the network that a channel
   is disabled and that it should not be used for routing. The individual
   `disable_flags` bits can be used to communicate more fine-grained information.
-- The `direction` is used to indicate which node in the channel node pair
-  has created and signed this message. If the node was `node_id_1` in the
-  `channel_announcment` message then the `direction` is 0 (false) otherwise
-  it is 1 (true) and the node is `node_id_2` in the `channel_announcement`
-  message.
+- The `second_peer` is used to indicate which node in the channel node pair has 
+  created and signed this message. If present, the node was `node_id_2` in the
+  `channel_announcment`, otherwise the node is `node_id_1` in the 
+  `channel_announcement` message.
 - `cltv_expiry_delta` is the number of blocks that the node will subtract from
   an incoming HTLC's `cltv_expiry`.
 - `htlc_minimum_msat` is the minimum HTLC value (in millisatoshi) that the
@@ -778,14 +777,13 @@ peer is offline.
 
 #### TLV Defaults
 
-For types 0, 6, 8, 10, 12, 14, 16 and 18, the following defaults apply if the
+For types 0, 6, 10, 12, 14, 16 and 18, the following defaults apply if the
 TLV is not present in the message:
 
 | `channel_update_2` TLV Type        | Default Value                                                      | Comment                                                                                     |
 |------------------------------------|--------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
 | 0  (`chain_hash`)                  | `6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000` | The hash of the genesis block of the mainnet Bitcoin blockchain.                            | 
 | 6  (`disable`)                     | empty                                                              |                                                                                             | 
-| 8  (`direction`)                   | false                                                              |                                                                                             | 
 | 10 (`cltv_expiry_delta`)           | 80                                                                 |                                                                                             | 
 | 12 (`htlc_minimum_msat`)           | 1                                                                  |                                                                                             | 
 | 14 (`htlc_maximum_msat`)           | floor(channel capacity / 2)                                        | // TODO: remove this since makes encoding/decoding dependent on things outside the message? | 
@@ -817,9 +815,9 @@ The origin node:
     - MUST set `chain_hash` AND `short_channel_id` to match the 32-byte hash AND
       8-byte channel ID that uniquely identifies the channel specified in the
       `channel_announcement_2` message.
-- MUST set `bip340_sig` to a valid [BIP340][bip-340] signature for its own
+- MUST set `signature` to a valid [BIP340][bip-340] signature for its own
   `node_id` key. The message to be signed is
-  `MsgHash("channel_update_2", "bip340_sig", m)` where `m` is the serialised
+  `MsgHash("channel_update_2", "signature", m)` where `m` is the serialised
   TLV stream of the `channel_update` (see the
   [`MsgHash`](#signature-message-construction) definition).
 - SHOULD NOT create redundant `channel_update_2`s.
@@ -834,7 +832,7 @@ The receiving node:
       channels.
 - SHOULD accept `channel_update_2`s for its own channels (even if non-public),
   in order to learn the associated origin nodes' forwarding parameters.
-- if `bip340_sig` is NOT a valid [BIP340][bip-340] signature (using `node_id`
+- if `signature` is NOT a valid [BIP340][bip-340] signature (using `node_id`
   over the message):
     - SHOULD send a `warning` and close the connection.
     - MUST NOT process the message further.
@@ -890,7 +888,7 @@ aggnonce = Musig2.NonceAgg(announcement_node_secnonce_1, announcement_bitcoin_pu
 ```
 
 The message, `msg` that the peers will sign is the serialisation of
-`channel_announcement_2` _without_ the `announcement_sig` field (i.e. without
+`channel_announcement_2` _without_ the `signature` field (i.e. without
 type 0)
 
 With all the information mentioned, both peers can now construct the
@@ -1003,10 +1001,9 @@ The full list of inputs required:
 - `node_id_2`
 - `tr_output_key`
 - `msg`: the serialised `channel_announcement_2` tlv stream.
-- `sig`: the 64-byte BIP340 signature found in the
-  `channel_announcement_signature` field of the `channel_announcement_2`
-  message. This signature must be parsed into `R` and `s` values as defined in
-  BIP327.
+- `sig`: the 64-byte BIP340 signature found in the `signature` field of the 
+  `channel_announcement_2` message. This signature must be parsed into `R` and 
+  `s` values as defined in BIP327.
 
 The aggregate key can be calculated as follows:
 
@@ -1016,7 +1013,7 @@ P_agg = MuSig2.KeyAgg(MuSig2.KeySort(`node_id_1`, `node_id_2`, `tr_output_key`))
 
 The signature can then be verified as follows:
 - Let `pk` = `bytes(P_agg)` where the `bytes` function is defined in BIP340.
-- Let `m` = `MsgHash("channel_announcement_2", "announcement_signature", msg)`
+- Let `m` = `MsgHash("channel_announcement_2", "signature", msg)`
 - Use the BIP340 `Verify` function to determine if the signature is valid by
   passing in `pk`, `m` and `sig`.
 
@@ -1059,10 +1056,9 @@ The full list of inputs required:
 - `bitcoin_key_1`
 - `bitcoin_key_2`
 - `msg`: the serialised `channel_announcement_2` tlv stream.
-- `sig`: the 64-byte BIP340 signature found in the
-  `channel_announcement_signature` field of the `channel_announcement_2`
-  message. This signature must be parsed into `R` and `s` values as defined in
-  BIP327.
+- `sig`: the 64-byte BIP340 signature found in the `signature` field of the 
+  `channel_announcement_2` message. This signature must be parsed into `R` and 
+  `s` values as defined in BIP327.
 
 The aggregate key can be calculated as follows:
 
@@ -1072,7 +1068,7 @@ P_agg = MuSig2.KeyAgg(MuSig2.KeySort(`node_id_1`, `node_id_2`, `bitcoin_key_1`, 
 
 The signature can then be verified as follows:
 - Let `pk` = `bytes(P_agg)` where the `bytes` function is defined in BIP340.
-- Let `m` = `MsgHash("channel_announcement_2", "announcement_signature", msg)`
+- Let `m` = `MsgHash("channel_announcement_2", "signature", msg)`
 - Use the BIP340 `Verify` function to determine if the signature is valid by
   passing in `pk`, `m` and `sig`.
 
