@@ -1158,9 +1158,12 @@ The ephemeral key was unparsable by the processing node.
 2. data:
    * [`u16`:`len`]
    * [`len*byte`:`channel_update`]
+   * [`u8`:`capacity_order`] (`option_capacity_order`)
 
 The channel from the processing node was unable to handle this HTLC,
-but may be able to handle it, or others, later.
+but may be able to handle it, or others, later.  The optional
+`capacity_order` field gives a very rough indication of how far over
+the channel capacity this htlc amount was.
 
 1. type: PERM|8 (`permanent_channel_failure`)
 
@@ -1341,6 +1344,8 @@ A _forwarding node_ MAY, but a _final node_ MUST NOT:
   transient error occurs in the outgoing channel (e.g. channel capacity reached,
   too many in-flight HTLCs, etc.):
     - return a `temporary_channel_failure` error.
+	- MAY set `capacity_order` to the approximate number of powers of 2 that the HTLC amount exceeded the available capacity.
+	- SHOULD randomize `capacity_order`.
   - if an otherwise unspecified, permanent error occurs during forwarding to its
   receiving peer (e.g. channel recently closed):
     - return a `permanent_channel_failure` error.
