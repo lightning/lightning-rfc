@@ -149,12 +149,14 @@ Currently defined tagged fields are:
 * `x` (6): `data_length` variable. `expiry` time in seconds (big-endian). Default is 3600 (1 hour) if not specified.
 * `c` (24): `data_length` variable. `min_final_cltv_expiry_delta` to use for the last HTLC in the route. Default is 18 if not specified.
 * `f` (9): `data_length` variable, depending on version. Fallback on-chain address: for Bitcoin, this starts with a 5-bit `version` and contains a witness program or P2PKH or P2SH address.
-* `r` (3): `data_length` variable. One or more entries containing extra routing information for a private route; there may be more than one `r` field
-   * `pubkey` (264 bits)
-   * `short_channel_id` (64 bits)
-   * `fee_base_msat` (32 bits, big-endian)
-   * `fee_proportional_millionths` (32 bits, big-endian)
-   * `cltv_expiry_delta` (16 bits, big-endian)
+* `r` (3): `data_length` variable. One or more entries containing extra routing information for a private route; there may be more than one `r` field.
+   * Fields are
+      * `pubkey` (264 bits)
+      * `short_channel_id` (64 bits)
+      * `fee_base_msat` (32 bits, big-endian)
+      * `fee_proportional_millionths` (32 bits, big-endian)
+      * `cltv_expiry_delta` (16 bits, big-endian)
+   * Be aware that `data_length` can express `2^10` (=1024 bits) as the longest, and a single hop will be 51 bytes (= 408 bits). So currently there is no way to specify a hint with more than two hops.
 * `9` (5): `data_length` variable. One or more 5-bit values containing features
   supported or required for receiving this payment.
   See [Feature Bits](#feature-bits).
