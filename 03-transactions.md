@@ -102,7 +102,14 @@ To allow an opportunity for penalty transactions, in case of a revoked commitmen
 The reason for the separate transaction stage for HTLC outputs is so that HTLCs can timeout or be fulfilled even though they are within the `to_self_delay` delay.
 Otherwise, the required minimum timeout on HTLCs is lengthened by this delay, causing longer timeouts for HTLCs traversing the network.
 
-The amounts for each output MUST be rounded down to whole satoshis. If this amount, minus the fees for the HTLC transaction, is less than the `dust_limit_satoshis` set by the owner of the commitment transaction, the output MUST NOT be produced (thus the funds add to fees).
+The amounts for the `to_local` and `to_remote` outputs MUST be rounded
+to the nearest satoshi. Any amount less than 500msat is rounded down;
+any amount greater than 500msat is rounded up. This minimizes loss to fees
+over the lifetime of a node. If the outputs are 500msats,
+the opener's `to_local`/`to_remote` is rounded up; with the corresponding peer's
+output rounding down.
+
+The amounts for each HTLC output MUST be rounded *down* to whole satoshis. If this amount, minus the fees for the HTLC transaction, is less than the `dust_limit_satoshis` set by the owner of the commitment transaction, the output MUST NOT be produced (thus the funds add to fees).
 
 #### `to_local` Output
 
@@ -367,7 +374,7 @@ Note that there are two possible variants for each node.
 ### Requirements
 
 Each node offering a signature:
-  - MUST round each output down to whole satoshis.
+  - MUST round each output to the nearest whole satoshi.
   - MUST subtract the fee given by `fee_satoshis` from the output to the funder.
   - MUST remove any output below its own `dust_limit_satoshis`.
   - MAY eliminate its own output.
@@ -389,6 +396,14 @@ has been used.
 
 There will be at least one output, if the funding amount is greater
 than twice `dust_limit_satoshis`.
+
+Output amounts are rounded to the nearest whole satoshi. Any amount less
+than 500msat is rounded down; any amount greater than 500msat is rounded up.
+In the case that both outputs are 500msat, the opener's output is rounded up;
+with the corresponding peer's output rounded down.
+
+This ensures that over the lifetime of a node, the number of satoshis
+a node earns/spends will be approximately accurate.
 
 ## Fees
 
