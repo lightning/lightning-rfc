@@ -407,13 +407,16 @@ The side with lesser funds can opt to omit their own output.
    * `txin[0]` sequence: `sequence` from `closing_complete` message
    * `txin[0]` script bytes: 0
    * `txin[0]` witness: `0 <signature_for_pubkey1> <signature_for_pubkey2>`
-
 * txout count: 1 or 2
   * The closer output:
-    * `txout` amount: the final balance for the closer, minus `closing_complete` `fee_satoshis`, rounded down to whole satoshis.
+    * `txout` amount:
+      * 0 if the `scriptpubkey` starts with `OP_RETURN`
+      * otherwise the final balance for the closer, minus `closing_complete.fee_satoshis`, rounded down to whole satoshis
 	* `txout` script: as specified in that closer's `scriptpubkey` in its `shutdown` message
   * The closee output:
-    * `txout` amount: the final balance for the closee, rounded down to whole satoshis.
+    * `txout` amount:
+      * 0 if the `scriptpubkey` starts with `OP_RETURN`
+      * otherwise the final balance for the closee, rounded down to whole satoshis
 	* `txout` script: as specified in that closee's `scriptpubkey` in its `shutdown` message
 
 ### Requirements
@@ -421,7 +424,7 @@ The side with lesser funds can opt to omit their own output.
 Each node offering a signature:
   - MUST round each output down to whole satoshis.
   - MUST subtract the fee given by `fee_satoshis` from the closer output.
-
+  - MUST set the output amount to 0 if the `scriptpubkey` is `OP_RETURN`.
 
 ## Fees
 

@@ -1731,7 +1731,10 @@ satoshis, which is possible if `dust_limit_satoshis` is below 546 satoshis).
 No funds are at risk when that happens, but the channel must be force-closed as
 the closing transaction will likely never reach miners.
 
-`OP_RETURN` is only standard if followed by PUSH opcodes, and the total script is 83 bytes or less.  We are slightly stricter, to only allow a single PUSH, but there are two forms in script: one which pushes up to 75 bytes, and a longer one (OP_PUSHDATA1) which is needed for 76-80 bytes.
+`OP_RETURN` is only standard if followed by PUSH opcodes, and the total script
+is 83 bytes or less. We are slightly stricter, to only allow a single PUSH, but
+there are two forms in script: one which pushes up to 75 bytes, and a longer
+one (OP_PUSHDATA1) which is needed for 76-80 bytes.
 
 ### Closing Negotiation: `closing_complete` and `closing_sig`
 
