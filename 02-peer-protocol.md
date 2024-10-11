@@ -1750,7 +1750,7 @@ This process will be repeated every time a `shutdown` message is received, which
 2. data:
    * [`channel_id`:`channel_id`]
    * [`u64`:`fee_satoshis`]
-   * [`u32`:`sequence`]
+   * [`u32`:`locktime`]
    * [`closing_tlvs`:`tlvs`]
 
 1. `tlv_stream`: `closing_tlvs`
@@ -1783,7 +1783,6 @@ Both nodes:
 The sender of `closing_complete` (aka. "the closer"):
   - MUST set `fee_satoshis` to a fee less than or equal to its outstanding balance, rounded down to whole satoshis.
   - MUST set `fee_satoshis` so that at least one output is not dust.
-  - MUST set `sequence` to a value other than 0xFFFFFFFF.
   - MUST use the last send and received `shutdown` `scriptpubkey` to generate the closing transaction specified in [BOLT #3](03-transactions.md#closing-transaction).
   - If it sets `signature` fields, MUST set them as valid signature using its `funding_pubkey` of:
     - `closer_no_closee`: closing transaction with only the local ("closer") output.
@@ -1804,8 +1803,6 @@ The sender of `closing_complete` (aka. "the closer"):
 
 The receiver of `closing_complete` (aka. "the closee"):
   - If `fee_satoshis` is greater than the closer's outstanding balance:
-    - MUST either send a `warning` and close the connection, or send an `error` and fail the channel.
-  - If `sequence` is equal to 0xFFFFFFFF:
     - MUST either send a `warning` and close the connection, or send an `error` and fail the channel.
   - Select a signature for validation:
     - if the local output amount is dust:

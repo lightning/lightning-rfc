@@ -396,15 +396,16 @@ than twice `dust_limit_satoshis`.
 
 This variant is used for `closing_complete` and `closing_sig` messages (i.e. where `option_simple_close` is negotiated).
 
-In this case, the node sending `closing_complete` ("the closer") pays the fees, and the sequence specified to allow RBF.  The outputs are ordered as detailed in [Transaction Output Ordering](#transaction-output-ordering).
+In this case, the node sending `closing_complete` ("the closer") pays the fees.
+The outputs are ordered as detailed in [Transaction Output Ordering](#transaction-output-ordering).
 
 The side with lesser funds can opt to omit their own output.
 
 * version: 2
-* locktime: 0
+* locktime: `locktime` from the `closing_complete` message
 * txin count: 1
-   * `txin[0]` outpoint: `txid` and `output_index` from `funding_created` message
-   * `txin[0]` sequence: `sequence` from `closing_complete` message
+   * `txin[0]` outpoint: `txid` and `output_index` of the channel output
+   * `txin[0]` sequence: 0xFFFFFFFD
    * `txin[0]` script bytes: 0
    * `txin[0]` witness: `0 <signature_for_pubkey1> <signature_for_pubkey2>`
 * txout count: 1 or 2
