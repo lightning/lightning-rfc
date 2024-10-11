@@ -1509,30 +1509,58 @@ Closing happens in two stages:
 2. once all HTLCs are resolved, the final channel close negotiation begins.
 
         +-------+                              +-------+
-        |       |--(1)-----  shutdown  ------->|       |
-        |       |<-(2)-----  shutdown  --------|       |
+        |       | shutdown(scriptA1)           |       |
+        |       |----------------------------->|       |
+        |       |           shutdown(scriptB1) |       |
+        |       |<-----------------------------|       |
         |       |                              |       |
         |       | <complete all pending HTLCs> |       |
-        |   A   |                 ...          |   B   |
+        |   A   |             ....             |   B   |
         |       |                              |       |
-        |       |--(3)-- closing_signed  F1--->|       |
-        |       |<-(4)-- closing_signed  F2----|       |
-        |       |              ...             |       |
-        |       |--(?)-- closing_signed  Fn--->|       |
-        |       |<-(?)-- closing_signed  Fn----|       |
-        +-------+                              +-------+
-
-        +-------+                              +-------+
-        |       |--(1)-----  shutdown  ------->|       |
-        |       |<-(2)-----  shutdown  --------|       |
+        |       | closing_complete             |       |
+        |       |----------------------------->|       |
+        |       |             closing_complete |       |
+        |       |<-----------------------------|       |
+        |       |                  closing_sig |       |
+        |       |<-----------------------------|       |
+        |       | closing_sig                  |       |
+        |       |----------------------------->|       |
         |       |                              |       |
-        |       | <complete all pending HTLCs> |       |
-        |   A   |                 ...          |   B   |
+        |       |   <A updates their script>   |       |
         |       |                              |       |
-        |       |--(3a)- closing_complete Fee->|       |
-        |       |<-(3b)- closing_complete Fee--|       |
-        |       |<-(4a)- closing_sig ----------|       |
-        |       |--(4b)- closing_sig --------->|       |
+        |       | shutdown(scriptA2)           |       |
+        |       |----------------------------->|       |
+        |       | closing_complete             |       |
+        |       |----------------------------->|       |
+        |       |                  closing_sig |       |
+        |       |<-----------------------------|       |
+        |       |                              |       |
+        |       |  <Both update their script>  |       | (*) This is a concurrent update
+        |       |                              |       |
+        |       | shutdown(scriptA3)           |       |
+        |       |------------------->          |       |
+        |       | closing_complete             |       |
+        |       |------------------->          |       |
+        |       |           shutdown(scriptB2) |       |
+        |       |          <-------------------|       |
+        |       |             closing_complete |       |
+        |       |          <-------------------|       |
+        |       |           shutdown(scriptA3) |       |
+        |       |          ------------------->|       |
+        |       |           closing_complete   |       |
+        |       |          ------------------->|       | (*) B doesn't answer with closing_sig because A's sig doesn't use scriptB2
+        |       | shutdown(scriptB2)           |       |
+        |       |<-------------------          |       |
+        |       |   closing_complete           |       |
+        |       |<-------------------          |       | (*) A doesn't answer with closing_sig because B's sig doesn't use scriptA3
+        |       | closing_complete             |       |
+        |       |----------------------------->|       | (*) A now uses scriptB2 and scriptA3 for closing_complete 
+        |       |             closing_complete |       |
+        |       |<-----------------------------|       | (*) B now uses scriptB2 and scriptA3 for closing_complete 
+        |       | closing_sig                  |       |
+        |       |----------------------------->|       |
+        |       |                  closing_sig |       |
+        |       |<-----------------------------|       |
         +-------+                              +-------+
 
 ### Closing Initiation: `shutdown`
@@ -1742,7 +1770,8 @@ Once shutdown is complete, the channel is empty of HTLCs, there are no commitmen
 for which a revocation is owed, and all updates are included on both commitments,
 the final current commitment transactions will have no HTLCs.
 
-Each peer says what fee it will pay, and the other side simply signs that transaction.  The lesser-paid peer (if either is) can opt to omit their own output from the closing tx.
+Each peer says what fee it will pay, and the other side simply signs that transaction.
+The lesser-paid peer (if either is) can opt to omit their own output from the closing tx.
 
 This process will be repeated every time a `shutdown` message is received, which allows re-negotiation (and RBF).
 
@@ -1755,13 +1784,13 @@ This process will be repeated every time a `shutdown` message is received, which
 
 1. `tlv_stream`: `closing_tlvs`
 2. types:
-    1. type: 1 (`closer_no_closee`)
+    1. type: 1 (`closer_output_only`)
     2. data:
         * [`signature`:`sig`]
-    1. type: 2 (`no_closer_closee`)
+    1. type: 2 (`closee_output_only`)
     2. data:
         * [`signature`:`sig`]
-    1. type: 3 (`closer_and_closee`)
+    1. type: 3 (`closer_and_closee_outputs`)
     2. data:
         * [`signature`:`sig`]
 
@@ -1772,7 +1801,7 @@ This process will be repeated every time a `shutdown` message is received, which
 
 #### Requirements
 
-Note: the details and requirements for the transaction being signed are in [BOLT 3](03-transactions.md#closing-transaction)).
+Note: the details and requirements for the transaction being signed are in [BOLT 3](03-transactions.md#closing-transaction).
 
 An output is *dust* if the amount is less than the [Bitcoin Core Dust Thresholds](03-transactions.md#dust-limits).
 
@@ -1783,36 +1812,35 @@ Both nodes:
 The sender of `closing_complete` (aka. "the closer"):
   - MUST set `fee_satoshis` to a fee less than or equal to its outstanding balance, rounded down to whole satoshis.
   - MUST set `fee_satoshis` so that at least one output is not dust.
-  - MUST use the last send and received `shutdown` `scriptpubkey` to generate the closing transaction specified in [BOLT #3](03-transactions.md#closing-transaction).
-  - If it sets `signature` fields, MUST set them as valid signature using its `funding_pubkey` of:
-    - `closer_no_closee`: closing transaction with only the local ("closer") output.
-    - `no_closer_closee`: closing transaction with only the remote ("closee") output.
-    - `closer_and_closee`: closing transaction with both the closer and closee outputs.
+  - MUST use the last sent and received `shutdown.scriptpubkey` to generate the closing transaction specified in [BOLT #3](03-transactions.md#closing-transaction).
+  - MUST set `signature` fields as valid signature using its `funding_pubkey` of:
+    - `closer_output_only`: closing transaction with only the local ("closer") output.
+    - `closee_output_only`: closing transaction with only the remote ("closee") output.
+    - `closer_and_closee_outputs`: closing transaction with both the closer and closee outputs.
   - If the local outstanding balance (in millisatoshi) is less than the remote outstanding balance:
-    - MUST NOT set `closer_no_closee`.
-    - MUST set exactly one of `no_closer_closee` or `closer_and_closee`.
-    - MUST set `no_closer_closee` if the local output amount is dust.
-    - MAY set `no_closer_closee` if it considers the local output amount uneconomic AND its `scriptpubkey` is not `OP_RETURN`.
+    - MUST NOT set `closer_output_only`.
+    - MUST set `closee_output_only` if the local output amount is dust.
+    - MAY set `closee_output_only` if it considers the local output amount uneconomical AND its `scriptpubkey` is not `OP_RETURN`.
   - Otherwise (not lesser amount, cannot remove own output):
-    - MUST NOT set `no_closer_closee`.
+    - MUST NOT set `closee_output_only`.
     - If the closee's output amount is dust:
-      - MUST set `closer_no_closee`.
-      - SHOULD NOT set `closer_and_closee`.
+      - MUST set `closer_output_only`.
+      - SHOULD NOT set `closer_and_closee_outputs`.
     - Otherwise:
-      - MUST set both `closer_no_closee` and `closer_and_closee`.
+      - MUST set both `closer_output_only` and `closer_and_closee_outputs`.
 
 The receiver of `closing_complete` (aka. "the closee"):
   - If `fee_satoshis` is greater than the closer's outstanding balance:
     - MUST either send a `warning` and close the connection, or send an `error` and fail the channel.
   - Select a signature for validation:
     - if the local output amount is dust:
-      - MUST use `closer_no_closee`.
-    - otherwise, if it considers the closee output amount uneconomic AND its `scriptpubkey` is not `OP_RETURN`:
-      - MUST use `closer_no_closee`.
-    - otherwise, if `closer_and_closee` is present:
-      - MUST use `closer_and_closee`.
+      - MUST use `closer_output_only`.
+    - otherwise, if it considers the local output amount uneconomical AND its `scriptpubkey` is not `OP_RETURN`:
+      - MUST use `closer_output_only`.
+    - otherwise, if `closer_and_closee_outputs` is present:
+      - MUST use `closer_and_closee_outputs`.
     - otherwise:
-      - MUST use `no_closer_closee`.
+      - MUST use `closee_output_only`.
   - If the selected signature field does not exist:
     - MUST either send a `warning` and close the connection, or send an `error` and fail the channel.
   - If the signature field is not valid for the corresponding closing transaction specified in [BOLT #3](03-transactions.md#closing-transaction):
@@ -1828,29 +1856,48 @@ The receiver of `closing_sig`:
   - if `tlvs` does not contain one of the tlv fields sent in `closing_complete`:
     - MUST ignore `closing_sig`.
   - if the signature field is not valid for the corresponding closing transaction specified in [BOLT #3](03-transactions.md#closing-transaction):
-    - MUST ignore `closing_complete`.
+    - MUST ignore `closing_sig`.
   - if the signature field is non-compliant with LOW-S-standard rule<sup>[LOWS](https://github.com/bitcoin/bitcoin/pull/6769)</sup>:
     - MUST either send a `warning` and close the connection, or send an `error` and fail the channel.
   - otherwise:
-    - MUST sign and broadcast the corrsponding closing transaction.
+    - MUST sign and broadcast the corresponding closing transaction.
 
 ### Rationale
 
-The close protocol is designed to avoid any failure scenarios caused by fee disagreement, since each side offers to pay its own desired fee.
+The close protocol is designed to avoid any failure scenarios caused by fee disagreement,
+since each side offers to pay its own desired fee.
 
-If one side has less funds than the other, it may choose to omit its own output, and in this case dust MUST be omitted, to ensure the resulting transaction can be broadcast.
+If one side has less funds than the other, it may choose to omit its own output, and in this case
+dust MUST be omitted, to ensure that the resulting transaction can be broadcast.
 
-The corner case where fees are so high that both outputs are dust is addressed in two ways: paying a low fee to avoid the problem, or using an OP_RETURN (which is never "dust").
+The corner case where fees are so high that both outputs are dust is addressed in two ways: paying
+a low fee to avoid the problem, or using an OP_RETURN (which is never "dust"). If one side chooses
+to use an `OP_RETURN` output, its amount must be 0 to ensure that the resulting transaction can be
+broadcast.
 
-Note that there is usually no reason to pay a high fee for rapid processing, since an urgent child could pay the fee on the closing transactions' behalf.
+Note that there is usually no reason to pay a high fee for rapid processing, since an urgent child
+could pay the fee on the closing transactions' behalf. If rapid processing is desired and CPFP is
+not an option, the closer can RBF its previous closing transactions by sending `shutdown` again.
 
-However, sending a new `shutdown` message overrides previous ones, so you can negotiate again (even changing the output address) if you want: in this case there's a race where you could receive a `closing_complete` for the previous output address, and the signature won't validate.  In this case, ignoring the `closing_complete` is the correct behaviour, as the new `shutdown` will trigger a new `closing_complete` with the correct signature.  This assumption that we only remember the last-sent of any message is why so many cases of bad signatures are simply ignored.
+Sending a new `shutdown` message overrides previous ones, so you can negotiate again (even changing
+the output address when `upfront_shutdown_script` was not negotiated) if you want: in this case
+there's a race where you could receive `closing_complete` for the previous output address, and the
+signature won't validate. In this case, ignoring the `closing_complete` is the correct behaviour,
+as the new `shutdown` will trigger a new `closing_complete` with the correct signature. This
+assumption that we only remember the last-sent of any message is why so many cases of bad
+signatures are simply ignored. 
 
-If the closer proposes a transaction which will not relay (an output is dust, or the fee rate it proposes is too low), it doesn't harm the closee to sign the transaction.
+If the closer proposes a transaction which will not relay (an output is dust, or the fee rate it
+proposes is too low), it doesn't harm the closee to sign the transaction.
 
-Similarly, if the closer proposes a high fee, it doesn't harm the closee to sign the transaction, as the closer is paying.
+Similarly, if the closer proposes a high fee, it doesn't harm the closee to sign the transaction,
+as the closer is paying.
 
-There's a slight game where each side would prefer the other side pay the fee, and proposes a minimal fee.  If neither side proposes a fee which will relay, the negotiation can occur again, or the final commitment transaction can be spent.  In practice, the opener has an incentive to offer a reasonable closing fee, as they would pay the fee for the commitment transaction, which also costs more to spend.
+There's a slight game where each side would prefer the other side pay the fee, and proposes a
+minimal fee. If neither side proposes a fee which will relay, the negotiation can occur again,
+or the final commitment transaction can be spent. In practice, the opener has an incentive to
+offer a reasonable closing fee, as they would pay the fee for the commitment transaction, which
+also costs more to spend.
 
 ## Normal Operation
 
