@@ -1530,29 +1530,32 @@ Closing happens in two stages:
         |       |                              |       |
         |       | shutdown(scriptA2)           |       |
         |       |----------------------------->|       |
+        |       |           shutdown(scriptB1) |       | (*) Bob doesn't update his script
+        |       |<-----------------------------|       |
         |       | closing_complete             |       |
         |       |----------------------------->|       |
         |       |                  closing_sig |       |
         |       |<-----------------------------|       |
         |       |                              |       |
-        |       |  <Both update their script>  |       | (*) This is a concurrent update
+        |       |   <Bob updates his script>   |       |
+        |       |                              |       |
+        |       |           shutdown(scriptB2) |       |
+        |       |<-----------------------------|       |
+        |       | shutdown(scriptA2)           |       |
+        |       |----------------------------->|       |
+        |       |             closing_complete |       |
+        |       |          <-------------------|       |
+        |       |                              |       |
+        |       |  <Alice updates her script>  |       | (*) This is a concurrent update while Bob is sending closing_complete
         |       |                              |       |
         |       | shutdown(scriptA3)           |       |
         |       |------------------->          |       |
-        |       | closing_complete             |       |
-        |       |------------------->          |       |
-        |       |           shutdown(scriptB2) |       |
-        |       |          <-------------------|       |
-        |       |             closing_complete |       |
-        |       |          <-------------------|       |
-        |       |           shutdown(scriptA3) |       |
-        |       |          ------------------->|       |
-        |       |           closing_complete   |       |
-        |       |          ------------------->|       | (*) B doesn't answer with closing_sig because A's sig doesn't use scriptB2
-        |       | shutdown(scriptB2)           |       |
-        |       |<-------------------          |       |
         |       |   closing_complete           |       |
         |       |<-------------------          |       | (*) A doesn't answer with closing_sig because B's sig doesn't use scriptA3
+        |       |           shutdown(scriptA3) |       |
+        |       |          ------------------->|       |
+        |       |           shutdown(scriptB2) |       | (*) B answers A's shutdown with his own shutdown, without any changes
+        |       |<-----------------------------|       |
         |       | closing_complete             |       |
         |       |----------------------------->|       | (*) A now uses scriptB2 and scriptA3 for closing_complete 
         |       |             closing_complete |       |
@@ -1806,8 +1809,11 @@ Note: the details and requirements for the transaction being signed are in [BOLT
 An output is *dust* if the amount is less than the [Bitcoin Core Dust Thresholds](03-transactions.md#dust-limits).
 
 Both nodes:
-  - After a `shutdown` has been received, AND no HTLCs remain in either commitment transaction:
+  - After a `shutdown` has been sent and received, AND no HTLCs remain in either commitment transaction:
     - SHOULD send a `closing_complete` message.
+  - When receiving `shutdown` again, if it did not send `shutdown` first:
+    - MUST respond with `shutdown`.
+    - MAY send `closing_complete` afterwards.
 
 The sender of `closing_complete` (aka. "the closer"):
   - MUST set `fee_satoshis` to a fee less than or equal to its outstanding balance, rounded down to whole satoshis.
@@ -1828,6 +1834,10 @@ The sender of `closing_complete` (aka. "the closer"):
       - SHOULD NOT set `closer_and_closee_outputs`.
     - Otherwise:
       - MUST set both `closer_output_only` and `closer_and_closee_outputs`.
+  - If it wants to send another `closing_complete` (e.g. with a different `fee_satoshis`):
+    - MUST send `shutdown` first.
+    - MUST receive `shutdown` from the remote node in response.
+    - MUST use the `scriptpubkey`s from those `shutdown` messages.
 
 The receiver of `closing_complete` (aka. "the closee"):
   - If `fee_satoshis` is greater than the closer's outstanding balance:
@@ -1885,7 +1895,12 @@ there's a race where you could receive `closing_complete` for the previous outpu
 signature won't validate. In this case, ignoring the `closing_complete` is the correct behaviour,
 as the new `shutdown` will trigger a new `closing_complete` with the correct signature. This
 assumption that we only remember the last-sent of any message is why so many cases of bad
-signatures are simply ignored. 
+signatures are simply ignored.
+
+When sending a new `shutdown`, we must receive a new `shutdown` from the remote node before
+sending `closing_complete`. This is necessary to be compatible with future taproot channels
+that use musig2 and need to exchange random nonces every time a transaction spending the channel
+output is signed.
 
 If the closer proposes a transaction which will not relay (an output is dust, or the fee rate it
 proposes is too low), it doesn't harm the closee to sign the transaction.
