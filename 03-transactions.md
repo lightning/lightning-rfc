@@ -17,6 +17,7 @@ This details the exact format of on-chain transactions, which both sides need to
           * [Received HTLC Outputs](#received-htlc-outputs)
         * [Trimmed Outputs](#trimmed-outputs)
     * [HTLC-timeout and HTLC-success Transactions](#htlc-timeout-and-htlc-success-transactions)
+    * [Legacy Closing Transaction](#legacy-closing-transaction)
 	* [Closing Transaction](#closing-transaction)
     * [Fees](#fees)
         * [Fee Calculation](#fee-calculation)
@@ -349,7 +350,7 @@ The witness script for the output is:
 
 To spend this via penalty, the remote node uses a witness stack `<revocationsig> 1`, and to collect the output, the local node uses an input with nSequence `to_self_delay` and a witness stack `<local_delayedsig> 0`.
 
-## Classic Closing Transaction
+## Legacy Closing Transaction
 
 This variant is used for `closing_signed` messages (i.e. where `option_simple_close` is not negotiated).
 

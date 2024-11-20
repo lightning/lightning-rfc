@@ -1765,7 +1765,7 @@ the closing transaction will likely never reach miners.
 `OP_RETURN` is only standard if followed by PUSH opcodes, and the total script
 is 83 bytes or less. We are slightly stricter, to only allow a single PUSH, but
 there are two forms in script: one which pushes up to 75 bytes, and a longer
-one (OP_PUSHDATA1) which is needed for 76-80 bytes.
+one (`OP_PUSHDATA1`) which is needed for 76-80 bytes.
 
 ### Closing Negotiation: `closing_complete` and `closing_sig`
 
@@ -1819,6 +1819,7 @@ The sender of `closing_complete` (aka. "the closer"):
   - MUST set `fee_satoshis` to a fee less than or equal to its outstanding balance, rounded down to whole satoshis.
   - MUST set `fee_satoshis` so that at least one output is not dust.
   - MUST use the last sent and received `shutdown.scriptpubkey` to generate the closing transaction specified in [BOLT #3](03-transactions.md#closing-transaction).
+  - MUST set `locktime` to the desired `nLockTime` of the closing transaction.
   - MUST set `signature` fields as valid signature using its `funding_pubkey` of:
     - `closer_output_only`: closing transaction with only the local ("closer") output.
     - `closee_output_only`: closing transaction with only the remote ("closee") output.
@@ -1858,12 +1859,12 @@ The receiver of `closing_complete` (aka. "the closee"):
   - If the signature field is non-compliant with LOW-S-standard rule<sup>[LOWS](https://github.com/bitcoin/bitcoin/pull/6769)</sup>:
     - MUST either send a `warning` and close the connection, or send an `error` and fail the channel.
   - MUST sign and broadcast the corresponding closing transaction.
-  - MUST send `closing_sig` with a single valid signature in the same tlv field as the `closing_complete`.
+  - MUST send `closing_sig` with a single valid signature in the same TLV field as the `closing_complete`.
 
 The receiver of `closing_sig`:
   - if `tlvs` does not contain exactly one signature:
     - MUST either send a `warning` and close the connection, or send an `error` and fail the channel.
-  - if `tlvs` does not contain one of the tlv fields sent in `closing_complete`:
+  - if `tlvs` does not contain one of the TLV fields sent in `closing_complete`:
     - MUST ignore `closing_sig`.
   - if the signature field is not valid for the corresponding closing transaction specified in [BOLT #3](03-transactions.md#closing-transaction):
     - MUST ignore `closing_sig`.
@@ -1881,9 +1882,9 @@ If one side has less funds than the other, it may choose to omit its own output,
 dust MUST be omitted, to ensure that the resulting transaction can be broadcast.
 
 The corner case where fees are so high that both outputs are dust is addressed in two ways: paying
-a low fee to avoid the problem, or using an OP_RETURN (which is never "dust"). If one side chooses
-to use an `OP_RETURN` output, its amount must be 0 to ensure that the resulting transaction can be
-broadcast.
+a low fee to avoid the problem, or using an `OP_RETURN` (which is never "dust"). If one side
+chooses to use an `OP_RETURN` output, its amount must be 0 to ensure that the resulting transaction
+can be broadcast.
 
 Note that there is usually no reason to pay a high fee for rapid processing, since an urgent child
 could pay the fee on the closing transactions' behalf. If rapid processing is desired and CPFP is
@@ -1900,7 +1901,9 @@ signatures are simply ignored.
 When sending a new `shutdown`, we must receive a new `shutdown` from the remote node before
 sending `closing_complete`. This is necessary to be compatible with future taproot channels
 that use musig2 and need to exchange random nonces every time a transaction spending the channel
-output is signed.
+output is signed. Note that the remote `shutdown` doesn't need to be an explicit response to the
+local `shutdown` that was sent: if both nodes concurrently send `shutdown`, they can exchange
+`closing_complete` immediately after receiving the remote `shutdown`.
 
 If the closer proposes a transaction which will not relay (an output is dust, or the fee rate it
 proposes is too low), it doesn't harm the closee to sign the transaction.
