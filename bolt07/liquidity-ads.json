@@ -1,0 +1,122 @@
+{
+  "node_private_key": "57ac961f1b80ebfb610037bf9c96c6333699bde42257919a53974811c34649e3",
+  "node_announcement": {
+    "node_id": "03ca9b880627d2d4e3b33164f66946349f820d26aa9572fe0e525e534850cbd413",
+    "alias": "LN-liquidity",
+    "features": [],
+    "color": [
+      42,
+      117,
+      87
+    ],
+    "addresses": [],
+    "timestamp": 1713171401,
+    "tlvStream": {
+      "option_will_fund": {
+        "funding_rates": [
+          {
+            "min_funding_amount_sat": 100000,
+            "max_funding_amount_sat": 500000,
+            "funding_weight": 550,
+            "funding_fee_basis": 100,
+            "funding_fee_base_sat": 5000,
+            "channel_creation_fee_sat": 1000,
+            "encoded": "000186a0 0007a120 0226 0064 00001388 000003e8"
+          },
+          {
+            "min_funding_amount_sat": 500000,
+            "max_funding_amount_sat": 5000000,
+            "funding_weight": 1100,
+            "funding_fee_basis": 75,
+            "funding_fee_base_sat": 0,
+            "channel_creation_fee_sat": 1500,
+            "encoded": "0007a120 004c4b40 044c 004b 00000000 000005dc"
+          }
+        ],
+        "payment_types": {
+          "supported": [
+            "from_channel_balance"
+          ],
+          "encoded": "01"
+        }
+      }
+    },
+    "signature": "2e6a9b7017d0c6d8c823f6aa5fcaaea266ea5c7ebc88345efc3ec227e71dee38148371cef4ffaf6d37318de42ded99203e89aaf9f697ad211915dc83dc9cfa63",
+    "encoded": "0101 2e6a9b7017d0c6d8c823f6aa5fcaaea266ea5c7ebc88345efc3ec227e71dee38148371cef4ffaf6d37318de42ded99203e89aaf9f697ad211915dc83dc9cfa63 0000 661cebc9 03ca9b880627d2d4e3b33164f66946349f820d26aa9572fe0e525e534850cbd413 2a7557 4c4e2d4c69717569646974790000000000000000000000000000000000000000 0000 052d0002000186a00007a1200226006400001388000003e80007a120004c4b40044c004b00000000000005dc000101"
+  },
+  "open_channel2": {
+    "chainHash": "6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000",
+    "temporaryChannelId": "0100000000000000000000000000000000000000000000000000000000000000",
+    "fundingFeerate": 5000,
+    "commitmentFeerate": 4000,
+    "fundingAmount": 250000,
+    "dustLimit": 500,
+    "maxHtlcValueInFlightMsat": 50000,
+    "htlcMinimum": 15,
+    "toSelfDelay": 144,
+    "maxAcceptedHtlcs": 483,
+    "lockTime": 650000,
+    "fundingPubkey": "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f",
+    "revocationBasepoint": "024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766",
+    "paymentBasepoint": "02531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe337",
+    "delayedPaymentBasepoint": "03462779ad4aad39514614751a71085f2f10e1c7a593e4e030efb5b8721ce55b0b",
+    "htlcBasepoint": "0362c0a046dacce86ddd0343c6d3c7c79c2208ba0d9c9cf24a6d046d21d21f90f7",
+    "firstPerCommitmentPoint": "03f006a18d5653c4edf5391ff23a61f03ff83d237e880ee61187fa9f379a028e0a",
+    "secondPerCommitmentPoint": "02989c0b76cb563971fdc9bef31ec06c3560f3249d6ee9e5d83c57625596e05f6f",
+    "channelFlags": {
+      "announceChannel": true
+    },
+    "tlvStream": {
+      "request_funding": {
+        "requested_sats": 750000,
+        "funding_rate": {
+          "min_funding_amount_sat": 500000,
+          "max_funding_amount_sat": 5000000,
+          "funding_weight": 1100,
+          "funding_fee_basis": 75,
+          "funding_fee_base_sat": 0,
+          "channel_creation_fee_sat": 1500
+        },
+        "payment_type": {
+          "type": "from_channel_balance",
+          "encoded": "0000"
+        },
+        "encoded": "05 1e 00000000000b71b0 0007a120004c4b40044c004b00000000000005dc 0000"
+      }
+    },
+    "encoded": "0040 6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000 0100000000000000000000000000000000000000000000000000000000000000 00001388 00000fa0 000000000003d090 00000000000001f4 000000000000c350 000000000000000f 0090 01e3 0009eb10 031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f 024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766 02531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe337 03462779ad4aad39514614751a71085f2f10e1c7a593e4e030efb5b8721ce55b0b 0362c0a046dacce86ddd0343c6d3c7c79c2208ba0d9c9cf24a6d046d21d21f90f7 03f006a18d5653c4edf5391ff23a61f03ff83d237e880ee61187fa9f379a028e0a 02989c0b76cb563971fdc9bef31ec06c3560f3249d6ee9e5d83c57625596e05f6f 01 051e00000000000b71b00007a120004c4b40044c004b00000000000005dc0000"
+  },
+  "accept_channel2": {
+    "temporaryChannelId": "0100000000000000000000000000000000000000000000000000000000000000",
+    "fundingAmount": 700000,
+    "dustLimit": 473,
+    "maxHtlcValueInFlightMsat": 100000000,
+    "htlcMinimum": 1,
+    "minimumDepth": 6,
+    "toSelfDelay": 144,
+    "maxAcceptedHtlcs": 50,
+    "fundingPubkey": "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f",
+    "revocationBasepoint": "024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766",
+    "paymentBasepoint": "02531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe337",
+    "delayedPaymentBasepoint": "03462779ad4aad39514614751a71085f2f10e1c7a593e4e030efb5b8721ce55b0b",
+    "htlcBasepoint": "0362c0a046dacce86ddd0343c6d3c7c79c2208ba0d9c9cf24a6d046d21d21f90f7",
+    "firstPerCommitmentPoint": "03f006a18d5653c4edf5391ff23a61f03ff83d237e880ee61187fa9f379a028e0a",
+    "secondPerCommitmentPoint": "02989c0b76cb563971fdc9bef31ec06c3560f3249d6ee9e5d83c57625596e05f6f",
+    "tlvStream": {
+      "provide_funding": {
+        "funding_rate": {
+          "min_funding_amount_sat": 500000,
+          "max_funding_amount_sat": 5000000,
+          "funding_weight": 1100,
+          "funding_fee_basis": 75,
+          "funding_fee_base_sat": 0,
+          "channel_creation_fee_sat": 1500
+        },
+        "funding_script": "00202ec38203f4cf37a3b377d9a55c7ae0153c643046dbdbe2ffccfb11b74420103c",
+        "signature": "c57cf393f6bd534472ec08cbfbbc7268501b32f563a21cdf02a99127c4f25168249acd6509f96b2e93843c3b838ee4808c75d0a15ff71ba886fda980b8ca954f",
+        "encoded": "05 78 0007a120004c4b40044c004b00000000000005dc 002200202ec38203f4cf37a3b377d9a55c7ae0153c643046dbdbe2ffccfb11b74420103c c57cf393f6bd534472ec08cbfbbc7268501b32f563a21cdf02a99127c4f25168249acd6509f96b2e93843c3b838ee4808c75d0a15ff71ba886fda980b8ca954f"
+      }
+    },
+    "encoded": "0041 0100000000000000000000000000000000000000000000000000000000000000 00000000000aae60 00000000000001d9 0000000005f5e100 0000000000000001 00000006 0090 0032 031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f 024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766 02531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe337 03462779ad4aad39514614751a71085f2f10e1c7a593e4e030efb5b8721ce55b0b 0362c0a046dacce86ddd0343c6d3c7c79c2208ba0d9c9cf24a6d046d21d21f90f7 03f006a18d5653c4edf5391ff23a61f03ff83d237e880ee61187fa9f379a028e0a 02989c0b76cb563971fdc9bef31ec06c3560f3249d6ee9e5d83c57625596e05f6f 05780007a120004c4b40044c004b00000000000005dc002200202ec38203f4cf37a3b377d9a55c7ae0153c643046dbdbe2ffccfb11b74420103cc57cf393f6bd534472ec08cbfbbc7268501b32f563a21cdf02a99127c4f25168249acd6509f96b2e93843c3b838ee4808c75d0a15ff71ba886fda980b8ca954f"
+  }
+}

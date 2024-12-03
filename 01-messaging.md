@@ -291,9 +291,17 @@ The `features` field MUST be padded to bytes with 0s.
     1. type: 3 (`remote_addr`)
     2. data:
         * [`...*byte`:`data`]
+    1. type: 5 (`option_will_fund`)
+    2. data:
+        * [`will_fund_rates`:`will_fund_rates`]
 
 The optional `networks` indicates the chains the node is interested in.
+
 The optional `remote_addr` can be used to circumvent NAT issues.
+
+`option_will_fund` allows nodes to announce their willingness to provide funding
+to other nodes using one of the included funding rates, as described in the
+[liquidity ads section](07-routing-gossip.md#liquidity-ads).
 
 #### Requirements
 

@@ -32,6 +32,7 @@ To support channel and node discovery, three *gossip messages* are supported:
   * [HTLC Fees](#htlc-fees)
   * [Pruning the Network View](#pruning-the-network-view)
   * [Recommendations for Routing](#recommendations-for-routing)
+  * [Liquidity Ads](#liquidity-ads)
   * [References](#references)
 
 ## Definition of `short_channel_id`
@@ -269,6 +270,13 @@ nodes not associated with an already known channel are ignored.
    * [`32*byte`:`alias`]
    * [`u16`:`addrlen`]
    * [`addrlen*byte`:`addresses`]
+   * [`node_announcement_tlvs`:`tlvs`]
+
+1. `tlv_stream`: `node_announcement_tlvs`
+2. types:
+    1. type: 5 (`option_will_fund`)
+    2. data:
+        * [`will_fund_rates`:`will_fund_rates`]
 
 `timestamp` allows for the ordering of messages, in the case of multiple
 announcements. `rgb_color` and `alias` allow intelligence services to assign
@@ -278,6 +286,10 @@ nodes colors like black and cool monikers like 'IRATEMONK' and 'WISTFULTOLL'.
 connections: it contains a series of `address descriptor`s for connecting to the
 node. The first byte describes the address type and is followed by the
 appropriate number of bytes for that type.
+
+`option_will_fund` allows nodes to announce their willingness to provide funding
+to other nodes using one of the included funding rates, as described in the
+[liquidity ads section](#liquidity-ads).
 
 The following `address descriptor` types are defined:
 
@@ -322,6 +334,9 @@ The origin node:
   bits it sets.
   - SHOULD not announce a Tor v2 onion service.
   - MUST NOT announce more than one `type 5` DNS hostname.
+  - If it includes `option_will_fund`:
+    - MAY include multiple funding rates.
+    - SHOULD NOT include more than 10 funding rates.
 
 The receiving node:
   - if `node_id` is NOT a valid compressed public key:
@@ -1107,6 +1122,187 @@ A->D's `update_add_htlc` message would be:
 And D->C's `update_add_htlc` would again be the same as B->C's direct payment
 above.
 
+## Liquidity Ads
+
+Liquidity ads allow nodes to announce their willingness to provide funding to
+other nodes for a fee. Sellers advertise various rates for the liquidity they
+are selling.
+
+1. subtype: `funding_rate`
+2. data:
+    * [`u32`:`min_funding_amount_sat`]
+    * [`u32`:`max_funding_amount_sat`]
+    * [`u16`:`funding_weight`]
+    * [`u16`:`funding_fee_basis`]
+    * [`u32`:`funding_fee_base_sat`]
+    * [`u32`:`channel_creation_fee_sat`]
+
+Sellers also define how the fees can be paid by listing the `payment_type`s
+they support.
+
+1. `payment_type`: 0 (`from_channel_balance`)
+
+Payment types are encoded using the TLV format, using the `payment_type` for
+the type field.
+
+Sellers advertize their rates and payment types using `will_fund_rates`.
+
+1. subtype: `will_fund_rates`
+2. data:
+    * [`u16`:`funding_rates_count`]
+    * [`funding_rates_count*funding_rate`:`funding_rates`]
+    * [`u16`:`payment_types_len`]
+    * [`payment_types_len*byte`:`payment_types`]
+
+Buyers select a specific rate and a `payment_type` offered by the seller
+and use `request_funds` to purchase that liquidity.
+
+1. subtype: `request_funds`
+2. data:
+    * [`u64`:`requested_sats`]
+    * [`funding_rate`:`funding_rate`]
+    * [`payment_type`:`payment_type`]
+
+Sellers accept the purchase with `will_fund` containing a signature that
+commits to the liquidity purchase parameters.
+
+1. subtype: `will_fund`
+2. data:
+    * [`funding_rate`:`funding_rate`]
+    * [`u16`:`funding_script_len`]
+    * [`funding_script_len*byte`:`funding_script`]
+    * [`signature`:`signature`]
+
+### Requirements
+
+A node selling liquidity:
+  - MUST advertise its funding rates with `will_fund_rates`:
+    - MUST include a list of `funding_rate`s for the amounts it may provide.
+    - MUST include a `payment_types` bitfield: for each `payment_type` that
+      it supports, the bit at the position matching this type MUST be set.
+  - When receiving `request_funds`:
+    - If the `funding_rate` does not match a rate it offers:
+      - MUST reject the funding attempt.
+    - If the `payment_type` is not supported:
+      - MUST reject the funding attempt.
+    - Otherwise:
+      - MUST send `will_fund` with the received `funding_rate`, the funding
+        script and a signature covering those fields (see below).
+      - MUST keep the channel open for at least a month to honor the
+        liquidity purchase.
+
+A node buying liquidity:
+  - MUST ignore any unknown `payment_type` in `will_fund_rates.payment_types`.
+  - MUST create `request_funds` with a `funding_rate` from the `funding_rates`
+    and a `payment_type` from the `payment_types` bitfield.
+  - MUST encode `payment_type` using the TLV format.
+
+### Computing liquidity fees
+
+When `request_funds` and `will_fund` have been exchanged, the buyer agrees to
+pay fees to the seller for the funding they provide to the channel based on
+the proposed `funding_weight`, `funding_fee_basis` and `funding_fee_base_sat`.
+
+If the buyer is opening a new channel, an additional `channel_creation_fee_sat`
+is applied. This can be used to hedge some of the future cost of closing that
+channel, which doesn't apply when additional liquidity is purchased on an
+existing channel (since the creation fee has already been paid).
+
+The funding fee has three components:
+
+* a fixed amount:
+  * `funding_fee_base_sat` if liquidity is purchased on an existing channel
+  * `funding_fee_base_sat + channel_creation_fee_sat` when opening a channel
+* a proportional amount based on the seller's `funding_amount`:
+  * `paid_funding_contribution = min(funding_amount, request_funds.requested_sats)`
+  * `funding_fee_proportional_sat = paid_funding_contribution * funding_fee_basis / 10_000`
+* a contribution to the on-chain fees paid by the seller:
+  * `funding_fee_mining_sat = funding_weight * funding_feerate_perkw / 1000`
+
+The total fee for a channel creation is then:
+
+    funding_fee_total = funding_fee_base_sat + channel_creation_fee_sat + funding_fee_proportional_sat + funding_fee_mining_sat
+
+The total fee for buying liquidity on an existing channel is:
+
+    funding_fee_total = funding_fee_base_sat + funding_fee_proportional_sat + funding_fee_mining_sat
+
+The seller provides an ECDSA signature in `will_fund` using the private key
+associated with their `node_id`. The data signed is:
+
+    SHA256("liquidity_ads_purchase" || funding_rate || funding_script)
+
+We use a tagged hash to ensure that this signature cannot be used in a
+different context.
+
+#### Requirements
+
+A node advertising a `funding_rate`:
+  - MUST set `min_funding_amount_sat` and `max_funding_amount_sat` to the
+    minimum and maximum amount it will contribute at this rate.
+  - MUST set `funding_fee_base_sat` to the base fee (in satoshi) it will charge.
+  - MUST set `channel_creation_fee_sat` to the additional fee it will charge for
+    channel creation.
+  - MUST set `funding_fee_basis` to the amount it will charge per contributed
+    satoshi (in basis points, ie 1/10_000).
+  - MUST set `funding_weight` to the transaction weight that will be charged.
+    It ensures that the funding node is refunded for some of the on-chain
+    fees it will pay to contribute the requested funds to a channel.
+
+### The `from_channel_balance` payment type
+
+The funding fee is taken from the buyer's transaction inputs and added to the
+seller's channel balance during the funding flow, using the
+[interactive-tx](./02-peer-protocol.md#interactive-transaction-construction)
+protocol. The buyer must contribute enough funds to cover their channel
+balance, the funding fee, and the on-chain fees for the weight of the funding
+transaction they're responsible for.
+
+#### Example
+
+A node contributes `500_000 sats` to a channel and requests `1_000_000 sats`
+from its peer, at a feerate of `2500 sat/kw`. The total weight of their inputs
+and outputs in the funding transaction is 720. More details about transaction
+weight can be found in the [interactive-tx section](02-peer-protocol.md#interactive-transaction-construction).
+
+The seller contributes `1_100_000 sats` with the following funding rate:
+
+	funding_weight = 444
+	funding_fee_base_sat = 233 sats
+  channel_creation_fee_sat = 500 sats
+	funding_fee_basis = 22
+
+The funding fee is:
+
+	funding_fee_base_sat = 233 sats
+  channel_creation_fee_sat = 500 sats
+	funding_fee_proportional_sat = min(1_000_000, 1_100_000) * 22 / 10_000 = 2200 sats
+	funding_fee_mining_sat = 444 * 2500 / 1000 = 1110 sats
+	funding_fee_total = 4043 sats
+
+The outputs to the peers in the commitment transaction will be
+
+	to-buyer:     500_000 sats
+	to-seller: 1_104_043 sats
+
+The miner fee for the buyer will be `720 * 2500 / 1000 = 1800 sats`.
+
+Minimum funds that the buyer must contribute to the funding transaction:
+
+	open_channel2.funding_satoshis: 500_000 sats
+	funding fee:                      4_043 sats
+	miner fee:                        1_800 sats
+	total required contribution:    505_843 sats
+
+Minimum funds that the seller must contribute to the funding transaction:
+
+	accept_channel2.funding_satoshis: 1_100_000 sats
+	miner fee [1]:                        1_110 sats
+	total required contribution:      1_101_110 sats
+
+[1] assumes `funding_weight = 444` is their total weight for this transaction.
+
+## References
 
 ![Creative Commons License](https://i.creativecommons.org/l/by/4.0/88x31.png "License CC-BY")
 <br>
