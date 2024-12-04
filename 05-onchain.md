@@ -308,16 +308,19 @@ There are several possible cases for an offered HTLC:
    HTLC. In this case, the recipient must use the preimage, once it receives it
    from the outgoing HTLC; otherwise, it will lose funds by sending an outgoing
    payment without redeeming the incoming payment.
+4. The HTLC is forwarded as above, but the recipient also happens to be the
+   final destination for the payment.  In this case, it knows the preimage but
+   as it has not received the full payment, it must not reveal
+   it.<sup>[Preimage-Extraction](https://lists.linuxfoundation.org/pipermail/lightning-dev/2020-October/002857.html)</sup>.
+   This problem is most easily solved by only accepting preimages from
+   responses to corresponding outgoing HTLCs.
 
 ### Requirements
 
 A local node:
-  - if it receives (or already possesses) a payment preimage for an unresolved
-  HTLC output that it has been offered AND for which it has committed to an
-  outgoing HTLC:
+  - if it has been offered an unresolved HTLC, AND it has offered a corresponding outgoing HTLC, for which it receives or has already received a payment preimage (by seeing it resolved via an onchain HTLC-success transaction, or via `update_fulfill_htlc`):
     - MUST *resolve* the output by spending it, using the HTLC-success
     transaction.
-    - MUST NOT reveal its own preimage when it's not the final recipient.<sup>[Preimage-Extraction](https://lists.linuxfoundation.org/pipermail/lightning-dev/2020-October/002857.html)</sup>
     - MUST resolve the output of that HTLC-success transaction.
   - otherwise:
     - if the *remote node* is NOT irrevocably committed to the HTLC:
