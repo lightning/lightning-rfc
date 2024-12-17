@@ -414,12 +414,12 @@ The side with lesser funds can opt to omit their own output.
     * `txout` amount:
       * 0 if the `scriptpubkey` starts with `OP_RETURN`
       * otherwise the final balance for the closer, minus `closing_complete.fee_satoshis`, rounded down to whole satoshis
-	* `txout` script: as specified in that closer's `scriptpubkey` in its `shutdown` message
+	* `txout` script: as specified in `closer_scriptpubkey` from the `closing_complete` message
   * The closee output:
     * `txout` amount:
       * 0 if the `scriptpubkey` starts with `OP_RETURN`
       * otherwise the final balance for the closee, rounded down to whole satoshis
-	* `txout` script: as specified in that closee's `scriptpubkey` in its `shutdown` message
+	* `txout` script: as specified in `closee_scriptpubkey` from the `closing_complete` message
 
 ### Requirements
 
