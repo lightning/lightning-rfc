@@ -5,7 +5,9 @@ drafted.
 
 Pull requests and comments welcome, seeking input from community stakeholders.
 
-Discussion available on the [lightning-dev mailing list](https://lists.linuxfoundation.org/mailman/listinfo/lightning-dev).
+Discussion available on [delving bitcoin](https://delvingbitcoin.org/tag/lightning).
+
+Previous discussions are still hosted on the [lightning-dev mailing list archive](https://lists.linuxfoundation.org/pipermail/lightning-dev/2023-December/004231.html)
 
 ### [Start here for Table of Contents](00-introduction.md)
 
