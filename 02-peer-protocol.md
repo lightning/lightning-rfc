@@ -1978,7 +1978,10 @@ is destined, is described in [BOLT #4](04-onion-routing.md).
     1. type: 0 (`blinded_path`)
     2. data:
         * [`point`:`path_key`]
-
+    1. type: 1 (`endorsed`)
+    2. data:
+        * [`byte`:`endorsed`]
+ 
 #### Requirements
 
 A sending node:
@@ -2016,6 +2019,21 @@ A sending node:
   - MUST increase the value of `id` by 1 for each successive offer.
   - if it is relaying a payment inside a blinded route:
     - MUST set `path_key` (see [Route Blinding](04-onion-routing.md#route-blinding))
+  - if it is the original source of the HTLC:
+    - if it does not expect immediate fulfillment upon receipt by the 
+      final destination: 
+      - SHOULD set `endorsed` to `0`.
+    - otherwise:  
+      - SHOULD set `endorsed` to `1`. 
+      - MAY choose to set `endorsed` to `0` to mimic endorsement patterns of 
+        HTLCs it has forwarded.
+  - otherwise: 
+    - if `endorsed` is present and non-zero for the corresponding incoming HTLC
+      AND the incoming peer is considered to have sufficient local reputation
+      (see [Local Reputation](recommendations/local-resource-conservation.md#local-reputation)): 
+      - SHOULD set `endorsed` to `1`
+    - otherwise: 
+      - SHOULD set `endorsed` to `0`.
 
 `id` MUST NOT be reset to 0 after the update is complete (i.e. after `revoke_and_ack` has
 been received). It MUST continue incrementing instead.
@@ -2047,6 +2065,10 @@ A receiving node:
     - MUST respond with an error as detailed in [Failure Messages](04-onion-routing.md#failure-messages)
   - Otherwise:
     - MUST follow the requirements for the reader of `payload` in [Payload Format](04-onion-routing.md#payload-format)
+  - if `endorsed` is not provided OR `endorsed` is zero:
+    - MAY choose to limit the liquidity and slots available to forward the 
+      corresponding outgoing HTLC in `onion_routing_packet`, if any 
+      (see [Resource Bucketing](recommendations/local-resource-conservation.md#resource-bucketing)): 
 
 The `onion_routing_packet` contains an obfuscated list of hops and instructions for each hop along the path.
 It commits to the HTLC by setting the `payment_hash` as associated data, i.e. includes the `payment_hash` in the computation of HMACs.
