@@ -623,13 +623,13 @@ Nodes can signal that they support extended gossip queries with the `gossip_quer
 
 `encoded_query_flags` is an array of bitfields, one bigsize per bitfield, one bitfield for each `short_channel_id`. Bits have the following meaning:
 
-| Bit Position  | Meaning                                  |
-| ------------- | ---------------------------------------- |
-| 0             | Sender wants `channel_announcement`      |
-| 1             | Sender wants `channel_update` for node 1 |
-| 2             | Sender wants `channel_update` for node 2 |
-| 3             | Sender wants `node_announcement` for node 1 |
-| 4             | Sender wants `node_announcement` for node 2 |
+| Bit Position | Meaning                                           |
+|--------------|---------------------------------------------------|
+| 0            | Sender wants `channel_announcement`/`_2`          |
+| 1            | Sender wants `channel_update`/`_2` for node 1     |
+| 2            | Sender wants `channel_update`/`_2` for node 2     |
+| 3            | Sender wants `node_announcement`/`_2` for node 1  |
+| 4            | Sender wants `node_announcement`/`_2` for node 2  |
 
 Query flags must be minimally encoded, which means that one flag will be encoded with a single byte.
 
@@ -639,11 +639,11 @@ Query flags must be minimally encoded, which means that one flag will be encoded
     * [`byte`:`full_information`]
 
 This is a general mechanism which lets a node query for the
-`channel_announcement` and `channel_update` messages for specific channels
-(identified via `short_channel_id`s). This is usually used either because
-a node sees a `channel_update` for which it has no `channel_announcement` or
-because it has obtained previously unknown `short_channel_id`s
-from `reply_channel_range`.
+`channel_announcement`/`_2` and `channel_update`/`_2` messages for specific 
+channels (identified via `short_channel_id`s). This is usually used either 
+because a node sees a `channel_update`/`_2` for which it has no 
+`channel_announcement`/`_2` or because it has obtained previously unknown 
+`short_channel_id`s from `reply_channel_range`.
 
 #### Requirements
 
@@ -654,7 +654,7 @@ The sender:
   that the `short_channel_id`s refer to.
   - MUST set the first byte of `encoded_short_ids` to the encoding type.
   - MUST encode a whole number of `short_channel_id`s to `encoded_short_ids`
-  - MAY send this if it receives a `channel_update` for a
+  - MAY send this if it receives a `channel_update`/`_2` for a
    `short_channel_id` for which it has no `channel_announcement`.
   - SHOULD NOT send this if the channel referred to is not an unspent output.
   - MAY include an optional `query_flags`. If so:
@@ -681,24 +681,25 @@ The receiver:
       - MAY close the connection.
   - MUST respond to each known `short_channel_id`:
     - if the incoming message does not include `encoded_query_flags`:
-      - with a `channel_announcement` and the latest `channel_update` for each end
-      - MUST follow with any `node_announcement`s for each `channel_announcement`
+      - with a `channel_announcement`/`_2` and the latest `channel_update`/_2` 
+        for each end
+      - MUST follow with any `node_announcement`/`_2`s for each `channel_announcement`/`_2`
     - otherwise:
       - We define `query_flag` for the Nth `short_channel_id` in
         `encoded_short_ids` to be the Nth bigsize of the decoded
         `encoded_query_flags`.
       - if bit 0 of `query_flag` is set:
-        - MUST reply with a `channel_announcement`
-      - if bit 1 of `query_flag` is set and it has received a `channel_update` from `node_id_1`:
-        - MUST reply with the latest `channel_update` for `node_id_1`
-      - if bit 2 of `query_flag` is set and it has received a `channel_update` from `node_id_2`:
-        - MUST reply with the latest `channel_update` for `node_id_2`
-      - if bit 3 of `query_flag` is set and it has received a `node_announcement` from `node_id_1`:
-        - MUST reply with the latest `node_announcement` for `node_id_1`
-      - if bit 4 of `query_flag` is set and it has received a `node_announcement` from `node_id_2`:
-        - MUST reply with the latest `node_announcement` for `node_id_2`
+        - MUST reply with a `channel_announcement`/`_2`
+      - if bit 1 of `query_flag` is set and it has received a `channel_update`/`_2` from `node_id_1`:
+        - MUST reply with the latest `channel_update`/`_2` for `node_id_1`
+      - if bit 2 of `query_flag` is set and it has received a `channel_update`/`_2` from `node_id_2`:
+        - MUST reply with the latest `channel_update`/`_2` for `node_id_2`
+      - if bit 3 of `query_flag` is set and it has received a `node_announcement`/`_2` from `node_id_1`:
+        - MUST reply with the latest `node_announcement`/`_2` for `node_id_1`
+      - if bit 4 of `query_flag` is set and it has received a `node_announcement`/`_2` from `node_id_2`:
+        - MUST reply with the latest `node_announcement`/`_2` for `node_id_2`
     - SHOULD NOT wait for the next outgoing gossip flush to send these.
-  - SHOULD avoid sending duplicate `node_announcements` in response to a single `query_short_channel_ids`.
+  - SHOULD avoid sending duplicate `node_announcements`/`_2` in response to a single `query_short_channel_ids`.
   - MUST follow these responses with `reply_short_channel_ids_end`.
   - if does not maintain up-to-date channel information for `chain_hash`:
     - MUST set `full_information` to 0.
@@ -733,12 +734,12 @@ timeouts.  It also causes a natural ratelimiting of queries.
 
 `query_option_flags` is a bitfield represented as a minimally-encoded bigsize. Bits have the following meaning:
 
-| Bit Position  | Meaning                 |
-| ------------- | ----------------------- |
-| 0             | Sender wants timestamps |
-| 1             | Sender wants checksums  |
+| Bit Position | Meaning                               |
+|--------------|---------------------------------------|
+| 0            | Sender wants timestamps/block heights |
+| 1            | Sender wants checksums                |
 
-Though it is possible, it would not be very useful to ask for checksums without asking for timestamps too: the receiving node may have an older `channel_update` with a different checksum, asking for it would be useless. And if a `channel_update` checksum is actually 0 (which is quite unlikely) it will not be queried.
+Though it is possible, it would not be very useful to ask for checksums without asking for timestamps/block heights too: the receiving node may have an older `channel_update` with a different checksum, asking for it would be useless. And if a `channel_update` checksum is actually 0 (which is quite unlikely) it will not be queried.
 
 1. type: 264 (`reply_channel_range`)
 2. data:
@@ -752,15 +753,21 @@ Though it is possible, it would not be very useful to ask for checksums without 
 
 1. `tlv_stream`: `reply_channel_range_tlvs`
 2. types:
-    1. type: 1 (`timestamps_tlv`)
+    1. type: 1 (`timestamps_blockheights_tlv`)
     2. data:
         * [`byte`:`encoding_type`]
-        * [`...*byte`:`encoded_timestamps`]
+        * [`...*byte`:`encoded_timestamps_blockheights`]
     1. type: 3 (`checksums_tlv`)
     2. data:
         * [`...*channel_update_checksums`:`checksums`]
 
-For a single `channel_update`, timestamps are encoded as:
+For the `timestamps_blockheights_tlv` field, the contents depends on whether the
+associated channel update message is for a channel announced using 
+`channel_announcement` or `channel_announcement_2`. 
+
+If the channel was announced using `channel_announcement`, then the associated 
+update will be a `channel_update`, meaning that the contents will represent 
+timestamps and will be encoded as:
 
 1. subtype: `channel_update_timestamps`
 2. data:
@@ -771,7 +778,20 @@ Where:
 * `timestamp_node_id_1` is the timestamp of the `channel_update` for `node_id_1`, or 0 if there was no `channel_update` from that node.
 * `timestamp_node_id_2` is the timestamp of the `channel_update` for `node_id_2`, or 0 if there was no `channel_update` from that node.
 
-For a single `channel_update`, checksums are encoded as:
+If the channel was announced usig `channel_announcement_2`, then the associated 
+update is a `channel_update_2` and the contents will represent block heights and 
+will be encoded as:
+
+1. subtype: `channel_update_blockheights`
+2. data:
+    * [`u32`:`block_height_node_id_1`]
+    * [`u32`:`block_height_node_id_2`]
+
+Where:
+* `block_height_node_id_1` is the block height of the `channel_update_2` for `node_id_1`, or 0 if there was no `channel_update_2` from that node.
+* `block_height_node_id_2` is the block height of the `channel_update_2` for `node_id_2`, or 0 if there was no `channel_update_2` from that node.
+
+For a single `channel_update`/`_2`, checksums are encoded as:
 
 1. subtype: `channel_update_checksums`
 2. data:
@@ -779,10 +799,10 @@ For a single `channel_update`, checksums are encoded as:
     * [`u32`:`checksum_node_id_2`]
 
 Where:
-* `checksum_node_id_1` is the checksum of the `channel_update` for `node_id_1`, or 0 if there was no `channel_update` from that node.
-* `checksum_node_id_2` is the checksum of the `channel_update` for `node_id_2`, or 0 if there was no `channel_update` from that node.
+* `checksum_node_id_1` is the checksum of the `channel_update`/`_2` for `node_id_1`, or 0 if there was no `channel_update`/`_2` from that node.
+* `checksum_node_id_2` is the checksum of the `channel_update`/`_2` for `node_id_2`, or 0 if there was no `channel_update`/`_2` from that node.
 
-The checksum of a `channel_update` is the CRC32C checksum as specified in [RFC3720](https://tools.ietf.org/html/rfc3720#appendix-B.4) of this `channel_update` without its `signature` and `timestamp` fields.
+The checksum of a `channel_update`/`_2` is the CRC32C checksum as specified in [RFC3720](https://tools.ietf.org/html/rfc3720#appendix-B.4) of this `channel_update`/`_2` without its `signature` and `timestamp`/`block_height` fields.
 
 This allows querying for channels within specific blocks.
 
@@ -806,6 +826,10 @@ The receiver of `query_channel_range`:
     - MUST limit `number_of_blocks` to the maximum number of blocks whose
       results could fit in `encoded_short_ids`
     - MAY split block contents across multiple `reply_channel_range`.
+    - If the sender of `query_channel_range` has not advertised the 
+      `option_taproot_gossip` feature bit then the response MUST only include 
+      short channel IDs for channels announced with the `channel_announcement` 
+      message.
     - the first `reply_channel_range` message:
       - MUST set `first_blocknum` less than or equal to the `first_blocknum` in `query_channel_range`
       - MUST set `first_blocknum` plus `number_of_blocks` greater than `first_blocknum` in `query_channel_range`.
@@ -817,7 +841,7 @@ The receiver of `query_channel_range`:
     - MUST set `sync_complete` to `true`.
 
 If the incoming message includes `query_option`, the receiver MAY append additional information to its reply:
-- if bit 0 in `query_option_flags` is set, the receiver MAY append a `timestamps_tlv` that contains `channel_update` timestamps for all `short_channel_id`s in `encoded_short_ids`
+- if bit 0 in `query_option_flags` is set, the receiver MAY append a `timestamps_blockheights_tlv` that contains `channel_update`/`_2` timestamps for all `short_channel_id`s in `encoded_short_ids`
 - if bit 1 in `query_option_flags` is set, the receiver MAY append a `checksums_tlv` that contains `channel_update` checksums for all `short_channel_id`s in `encoded_short_ids`
 
 #### Rationale
@@ -841,6 +865,16 @@ The addition of timestamp and checksum fields allow a peer to omit querying for 
     * [`chain_hash`:`chain_hash`]
     * [`u32`:`first_timestamp`]
     * [`u32`:`timestamp_range`]
+    * [`gossip_timestamps_filter_tlvs`:`tlvs`]
+
+1. `tlv_stream`: `gossip_timestamps_filter_tlvs`
+2. types:
+    1. type: 2 (`first_block`)
+    2. data:
+        * [`u32`:`block_height`]
+   1. type: 4 (`block_height_range`)
+   2. data:
+       * [`u32`:`num_blocks`]
 
 This message allows a node to constrain future gossip messages to
 a specific range.  A node which wants any gossip messages has
@@ -860,20 +894,26 @@ The sender:
 The receiver:
   - SHOULD send all gossip messages whose `timestamp` is greater or
     equal to `first_timestamp`, and less than `first_timestamp` plus
-    `timestamp_range`.
+    `timestamp_range`. This applies to the messages: `channel_announcement`, 
+    `channel_update` and `node_announcement`.
     - MAY wait for the next outgoing gossip flush to send these.
-  - SHOULD send gossip messages as it generates them regardless of `timestamp`.
+  - SHOULD send all gossip messages whose `block_height` is greater than or 
+    equal to `first_block`, and less than `first_block` plus `num_blocks`. 
+  - SHOULD send gossip messages as it generates them regardless of `timestamp`/`block_height`.
   - Otherwise (relayed gossip):
     - SHOULD restrict future gossip messages to those whose `timestamp`
       is greater or equal to `first_timestamp`, and less than
-      `first_timestamp` plus `timestamp_range`.
-  - If a `channel_announcement` has no corresponding `channel_update`s:
-    - MUST NOT send the `channel_announcement`.
+      `first_timestamp` plus `timestamp_range` or whose `block_height` is 
+      greater than or equal to `first_block`, and less than `first_block` plus 
+      `num_blocks`.
+  - If a `channel_announcement`/`_2` has no corresponding `channel_update`/`_2`s:
+    - MUST NOT send the `channel_announcement`/`_2`.
   - Otherwise:
     - MUST consider the `timestamp` of the `channel_announcement` to be the `timestamp` of a corresponding `channel_update`.
-    - MUST consider whether to send the `channel_announcement` after receiving the first corresponding `channel_update`.
-  - If a `channel_announcement` is sent:
-    - MUST send the `channel_announcement` prior to any corresponding `channel_update`s and `node_announcement`s.
+    - MUST consider the `block_height` of the `channel_announcement_2` to be the height of the block it was mined in.
+    - MUST consider whether to send the `channel_announcement`/`_2` after receiving the first corresponding `channel_update`/`_2`.
+  - If a `channel_announcement`/`_2` is sent:
+    - MUST send the `channel_announcement`/`_2` prior to any corresponding `channel_update`/`_2`s and `node_announcement`/`_2`s.
 
 #### Rationale
 
