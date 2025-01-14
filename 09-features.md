@@ -51,7 +51,7 @@ The Context column decodes as follows:
 | 46/47 | `option_scid_alias`               | Supply channel aliases for routing                        | IN       |                           | [BOLT #2][bolt02-channel-ready]                                       |
 | 48/49 | `option_payment_metadata`         | Payment metadata in tlv record                            | 9        |                           | [BOLT #11](11-payment-encoding.md#tagged-fields)                      |
 | 50/51 | `option_zeroconf`                 | Understands zeroconf channel types                        | IN       | `option_scid_alias`       | [BOLT #2][bolt02-channel-ready]                                       |
-
+| 56/57 | `trampoline_routing`              | This node supports trampoline routing                     | IN9      | `basic_mpp`               | [BOLT #4](bolt04-trampoline)                                          |
 
 ## Requirements
 
@@ -105,4 +105,5 @@ This work is licensed under a [Creative Commons Attribution 4.0 International Li
 [bolt07-query]: 07-routing-gossip.md#query-messages
 [bolt04-mpp]: 04-onion-routing.md#basic-multi-part-payments
 [bolt04-route-blinding]: 04-onion-routing.md#route-blinding
+[bolt04-trampoline]: 04-onion-routing.md#trampoline-payments
 [ml-sighash-single-harmful]: https://lists.linuxfoundation.org/pipermail/lightning-dev/2020-September/002796.html

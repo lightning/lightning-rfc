@@ -688,10 +688,12 @@ the `onion_message` `invoice` field.
 
 ## Invoice Features
 
-| Bits | Description                      | Name           |
-|------|----------------------------------|----------------|
-| 16   | Multi-part-payment support       | MPP/compulsory |
-| 17   | Multi-part-payment support       | MPP/optional   |
+| Bits | Description                      | Name                  |
+|------|----------------------------------|-----------------------|
+| 16   | Multi-part-payment support       | MPP/compulsory        |
+| 17   | Multi-part-payment support       | MPP/optional          |
+| 56   | Trampoline routing support       | Trampoline/compulsory |
+| 57   | Trampoline routing support       | Trampoline/optional   |
 
 The 'MPP support' invoice feature indicates that the payer MUST (16) or
 MAY (17) use multiple part payments to pay the invoice.

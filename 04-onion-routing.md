@@ -50,6 +50,7 @@ A node:
   * [Packet Structure](#packet-structure)
     * [Payload Format](#payload-format)
     * [Basic Multi-Part Payments](#basic-multi-part-payments)
+    * [Trampoline Payments](#trampoline-payments)
   * [Route Blinding](#route-blinding)
     * [Inside encrypted_recipient_data: encrypted_data_tlv](Inside-encrypted_recipient_data-encrypted_data_tlv)
   * [Accepting and Forwarding a Payment](#accepting-and-forwarding-a-payment)
@@ -208,12 +209,32 @@ This is formatted according to the Type-Length-Value format defined in [BOLT #1]
     1. type: 12 (`current_path_key`)
     2. data:
         * [`point`:`path_key`]
+    1. type: 14 (`outgoing_node_id`)
+    2. data:
+        * [`point`:`outgoing_node_id`]
     1. type: 16 (`payment_metadata`)
     2. data:
         * [`...*byte`:`payment_metadata`]
     1. type: 18 (`total_amount_msat`)
     2. data:
         * [`tu64`:`total_msat`]
+    1. type: 20 (`trampoline_onion_packet`)
+    2. data:
+        * [`byte`:`version`]
+        * [`point`:`public_key`]
+        * [`...*byte`:`hop_payloads`]
+        * [`32*byte`:`hmac`]
+    1. type: 21 (`recipient_features`)
+    2. data:
+        * [`...*byte`:`features`]
+    1. type: 22 (`recipient_blinded_paths`)
+    2. data:
+        * [`...*payment_blinded_path`:`paths`]
+
+1. subtype: `payment_blinded_path`
+2. data:
+   * [`path`:`blinded_path`]
+   * [`blinded_payinfo`:`payment_info`]
 
 `short_channel_id` is the ID of the outgoing channel used to route the
 message; the receiving peer should operate the other end of this channel.
@@ -277,10 +298,10 @@ The writer of the TLV `payload`:
   - For every node outside of a blinded route:
     - MUST include `amt_to_forward` and `outgoing_cltv_value`.
     - For every non-final node:
-      - MUST include `short_channel_id`
+      - MUST include `short_channel_id` or `outgoing_node_id`
       - MUST NOT include `payment_data`
     - For the final node:
-      - MUST NOT include `short_channel_id`
+      - MUST NOT include `short_channel_id` nor `outgoing_node_id`
       - if the recipient provided `payment_secret`:
         - MUST include `payment_data`
         - MUST set `payment_secret` to the one provided
@@ -427,7 +448,8 @@ constrained in which paths they can take when retrying payments along specific
 paths. However, no individual HTLC may be for less than the difference between
 the total paid and `total_msat`.
 
-The restriction on sending an HTLC once the set is over the agreed total prevents the preimage being released before all
+The restriction on sending an HTLC once the set is over the agreed
+total prevents the preimage being released before all
 the partial payments have arrived: that would allow any intermediate
 node to immediately claim any outstanding partial payments.
 
@@ -435,6 +457,89 @@ An implementation may choose not to fulfill an HTLC set which
 otherwise meets the amount criterion (eg. some other failure, or
 invoice timeout), however if it were to fulfill only some of them,
 intermediary nodes could simply claim the remaining ones.
+
+### Trampoline Payments
+
+Trampoline payments allow nodes with an incomplete view of the network to
+delegate the construction of parts of the route to trampoline nodes.
+
+The origin node only needs to select a set of trampoline nodes and to know a
+route to the first trampoline node. Each trampoline node is responsible for
+finding its own route to the next trampoline node. The last trampoline node
+must be the final recipient, or it must receive a list of blinded paths to
+which it should relay the payment.
+
+The `trampoline_onion_packet` has a variable size to allow implementations to
+choose their own trade-off between flexibility and privacy. It's recommended to
+add trailing filler data to the `trampoline_onion_packet` when using a small
+number of hops. It uses the same onion construction as the `onion_packet` and
+is embedded inside an `onion_packet`.
+
+Trampoline nodes are free to use as many hops as they want between themselves
+as long as they are able to create a route that satisfies the `cltv` and `fees`
+requirements contained in the onion.
+
+#### Requirements
+
+A sending node:
+
+- If the invoice doesn't support the `trampoline_routing` feature:
+  - If it is a Bolt 12 invoice containing non-empty blinded paths:
+    - MAY use trampoline routing to pay that invoice.
+    - In the trampoline onion payload for the last trampoline node:
+      - MUST include a subset of the invoice's blinded paths in `recipient_blinded_paths`.
+      - MUST NOT include `outgoing_node_id`.
+      - SHOULD include the invoice features in `recipient_features`.
+  - Otherwise:
+    - MUST NOT use trampoline routing to pay that invoice.
+- MUST ensure that each hop in the `trampoline_onion_packet` supports `trampoline_routing`.
+- When paying a Bolt 11 invoice:
+  - MUST encrypt the `trampoline_onion_packet` with the same construction as `onion_packet`:
+    - MUST include `amt_to_forward` and `outgoing_cltv_value` for each hop.
+    - MUST use `outgoing_node_id` instead of `short_channel_id` to identify the next trampoline node.
+    - MUST include the invoice's `payment_secret` in the _last_ trampoline hop's payload.
+    - MAY add trailing filler data similar to what is done in the `onion_packet`.
+- When paying a Bolt 12 invoice that supports the `trampoline_routing` feature:
+  - For each node in the invoice's blinded path that the sender wants to use:
+    - MUST create a trampoline onion payload which:
+      - MUST include the `encrypted_recipient_data`.
+      - For the first node in the blinded route:
+        - MUST include the `current_path_key` provided in the invoice.
+      - For the final node:
+        - MUST include `amt_to_forward`, `outgoing_cltv_value` and `total_amount_msat`.
+      - MUST NOT include any other field.
+  - MAY prepend additional trampoline nodes where the trampoline onion payload:
+    - MUST include `amt_to_forward` and `outgoing_cltv_value`.
+    - MUST include `outgoing_node_id`.
+- MUST use a different `session_key` for the `trampoline_onion_packet` and the `onion_packet`.
+- MUST include the `trampoline_onion_packet` tlv in the _last_ hop's payload of the `onion_packet`.
+- MUST generate a random `payment_secret` to use in the outer onion.
+
+When processing a `trampoline_onion_packet`, a receiving node:
+
+- If it doesn't support `trampoline_routing`:
+  - MUST report a route failure to the origin node.
+- Otherwise, if it supports `trampoline_routing`:
+  - MUST process the `trampoline_onion_packet` as an `onion_packet`.
+  - MUST fail the HTLC if dictated by the requirements under [Failure Messages](#failure-messages).
+  - If it is not the final node:
+    - If the incoming payment is a multi-part payment:
+      - MUST wait to receive all the payment parts before forwarding.
+    - If `encrypted_recipient_data` is included:
+      - MUST use `current_path_key` from the trampoline onion or the outer onion to decrypt it.
+      - MUST validate its content as it would for the non-trampoline case.
+      - MUST include the next `current_path_key` in the `hop_payload` for the next trampoline node.
+    - MUST compute a route to the next trampoline node.
+    - MUST include the peeled `trampoline_onion_packet` in the `hop_payload` for the next trampoline node.
+    - If it uses a multi-part payment to forward to the next trampoline node:
+      - MUST generate a random `payment_secret` to use in the outer onion.
+  - If `recipient_blinded_paths` is included:
+    - MUST forward the payment using the blinded paths provided.
+    - MAY use features included in `recipient_features`.
+  - If it is the final node:
+    - MUST reject the payment if:
+      - The outer onion's `outgoing_cltv_value` is smaller than the trampoline onion's `outgoing_cltv_value`.
+      - The outer onion's `total_msat` is smaller than the trampoline onion's `amt_to_forward`.
 
 ## Route Blinding
 
@@ -634,10 +739,13 @@ Encrypted recipient data is created by the final recipient to give to the
 sender, containing instructions for the node on how to handle the message (it can also be created by the sender themselves: the node forwarding cannot tell).  It's used
 in both payment onions and onion messages onions.  See [Route Blinding](#route-blinding).
 
-
 # Accepting and Forwarding a Payment
 
-Once a node has decoded the payload it either accepts the payment locally, or forwards it to the peer indicated as the next hop in the payload.
+Once a node has decoded the payload it either accepts the payment locally, or
+forwards it to the peer indicated as the next hop in the payload.
+
+When using trampoline routing, the next hop is not necessarily a direct peer,
+but otherwise it is.
 
 ## Non-strict Forwarding
 
@@ -698,8 +806,10 @@ This allows the final node to check these values and return errors if needed,
 but it also eliminates the possibility of probing attacks by the second-to-last
 node. Such attacks could, otherwise, attempt to discover if the receiving peer is the
 last one by re-sending HTLCs with different amounts/expiries.
+
 The final node will extract its onion payload from the HTLC it has received and
-compare its values against those of the HTLC. See the
+compare its values against those of the HTLC. When using trampoline payments,
+the final node will extract these from the trampoline onion payload. See the
 [Returning Errors](#returning-errors) section below for more details.
 
 If not for the above, since it need not forward payments, the final node could
@@ -1068,6 +1178,21 @@ key, and computes the HMAC, using each hop's `um` key.
 The origin node can detect the sender of the error message by matching the
 `hmac` field with the computed HMAC.
 
+For trampoline payments, the flow is the same. Intermediate trampoline nodes
+first decrypt the downstream error using the `ammag` and `um` keys for their
+forward path. If the error comes from an intermediate node _before_ the next
+trampoline node, they may replace it with their own error for the origin node,
+otherwise they must encrypt on top of the next trampoline node's error.
+
+Intermediate trampoline hops apply the obfuscation step twice: first with the
+`ammag` key derived from their trampoline shared secret, then with the `ammag`
+key derived from their outer onion shared secret.
+
+The origin node first iteratively decrypts the error message using the keys
+derived from the outer onion's shared secrets. If the result does not match
+the `hmac` field, it then continues decrypting using the keys derived from
+the trampoline onion's shared secrets.
+
 The association between the forward and return packets is handled outside of
 this onion routing protocol, e.g. via association with an HTLC in a payment
 channel.
@@ -1294,6 +1419,28 @@ reasonable time.
    * [`sha256`:`sha256_of_onion`]
 
 An error occurred within the blinded path.
+
+1. type: NODE|25 (`temporary_trampoline_failure`)
+
+The trampoline node was unable to relay the payment to the next trampoline
+node, but may be able to handle it, or others, later.
+This error usually indicates that routes were found but failed because of
+temporary failures at intermediate hops.
+
+1. type: NODE|26 (`trampoline_fee_or_expiry_insufficient`)
+2. data:
+   * [`u32`:`fee_base_msat`]
+   * [`u32`:`fee_proportional_millionths`]
+   * [`u16`:`cltv_expiry_delta`]
+
+The fee amount or cltv value was below that required by the trampoline node to
+forward to the next trampoline node, but there are routes available if the
+sender retries with the fees and cltv provided in the error data.
+
+1. type: PERM|27 (`unknown_next_trampoline`)
+
+The trampoline onion specified an `outgoing_node_id` that cannot be reached
+from the processing node.
 
 ### Requirements
 
