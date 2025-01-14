@@ -22,6 +22,7 @@ This is version 0.
 9. [BOLT #9](09-features.md): Assigned Feature Flags
 10. [BOLT #10](10-dns-bootstrap.md): DNS Bootstrap and Assisted Node Location
 11. [BOLT #11](11-payment-encoding.md): Invoice Protocol for Lightning Payments
+12. [BOLT #12](12-offer-encoding.md): Flexible Protocol for Lightning Payments
 
 ## The Spark: A Short Introduction to Lightning
 
