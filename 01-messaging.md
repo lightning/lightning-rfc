@@ -26,6 +26,8 @@ All data fields are unsigned big-endian unless otherwise specified.
     * [The `error` and `warning` Messages](#the-error-and-warning-messages)
   * [Control Messages](#control-messages)
     * [The `ping` and `pong` Messages](#the-ping-and-pong-messages)
+  * [Peer Storage](#peer-storage)
+    * [The `peer_storage` and `peer_storage_retrieval` Messages](#the-peer_storage-and-peer_storage_retrieval-messages)
   * [Appendix A: BigSize Test Vectors](#appendix-a-bigsize-test-vectors)
   * [Appendix B: Type-Length-Value Test Vectors](#appendix-b-type-length-value-test-vectors)
   * [Appendix C: Message Extension](#appendix-c-message-extension)
@@ -501,6 +503,79 @@ every message maximally).
 
 Finally, the usage of periodic `ping` messages serves to promote frequent key
 rotations as specified within [BOLT #8](08-transport.md).
+
+## Peer storage
+
+### The `peer_storage` and `peer_storage_retrieval` Messages
+
+Nodes that advertise the `option_provide_storage` feature offer storing
+arbitrary data for their peers. The data stored must not exceed 65531 bytes,
+which lets it fit in lightning messages.
+
+Nodes can verify that their `option_provide_storage` peers correctly store
+their data at each reconnection, by comparing the contents of the
+retrieved data with the last one they sent. However, nodes should not expect
+their peers to always have their latest data available.
+
+Nodes ask their peers to store data using the `peer_storage` message and expect
+peers to return the latest data to them using the `peer_storage_retrieval` message:
+
+1. type: 7 (`peer_storage`)
+2. data:
+   * [`u16`: `length`]
+   * [`length*byte`:`blob`]
+
+
+1. type: 9 (`peer_storage_retrieval`)
+2. data:
+   * [`u16`: `length`]
+   * [`length*byte`:`blob`]
+
+
+Requirements:
+
+The sender of `peer_storage`:
+  - MAY send `peer_storage` whenever necessary.
+  - MUST limit its `blob` to 65531 bytes.
+  - MUST encrypt the data in a manner that ensures its integrity upon receipt.
+  - SHOULD pad the `blob` to ensure its length is always exactly 65531 bytes.
+
+The receiver of `peer_storage`:
+  - If it offered `option_provide_storage`:
+    - if it has an open channel with the sender:
+      - MUST store the message.
+    - MAY store the message anyway.
+
+- If it does store the message:
+  - MAY delay storage to ratelimit peer to no more than one update per minute.
+  - MUST replace the old `blob` with the latest received.
+  - MUST send `peer_storage_retrieval` again after reconnection, after exchanging `init` messages.
+
+
+The sender of `peer_storage_retrieval`:
+  - MUST include the last `blob` it stored for that peer.
+  - when all channels with that peer are closed:
+    - SHOULD wait at least 2016 blocks before deleting the `blob`.
+
+The receiver of `peer_storage_retrieval`:
+  - when it receives `peer_storage_retrieval` with an outdated or irrelevant data:
+    - MAY send a warning.
+
+#### Rationale:
+The `peer_storage` and `peer_storage_retrieval` messages enable nodes to securely store
+and share data with other nodes in the network, serving as a backup mechanism for important
+information. By utilizing them, nodes can safeguard crucial data, enhancing the network's
+resilience and reliability. Additionally, even if we don't have an open channel, some nodes
+might provide this service in exchange for some sats so they may store `peer_storage`.
+
+Nodes should pad the `blob` to obscure its actual size, enhancing privacy by making size-based
+analysis more difficult for the receiver.
+
+`peer_storage_retrieval` should not be sent after `channel_reestablish` because then the user
+wouldn't have an option to recover the node and update its state in case they lost data.
+
+Nodes should send a `peer_storage` message whenever they wish to update the `blob` stored with their peers.
+This `blob` can be used to distribute encrypted data, which could be helpful in restoring the node.
 
 ## Appendix A: BigSize Test Vectors
 
