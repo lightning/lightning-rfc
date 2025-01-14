@@ -42,7 +42,7 @@ A node:
     - MUST report a route failure to the origin node.
     - MUST discard the packet.
 
-# Table of Contents
+## Table of Contents
 
   * [Conventions](#conventions)
   * [Key Generation](#key-generation)
@@ -70,7 +70,7 @@ A node:
   * [References](#references)
   * [Authors](#authors)
 
-# Conventions
+## Conventions
 
 There are a number of conventions adhered to throughout this document:
 
@@ -99,7 +99,7 @@ There are a number of conventions adhered to throughout this document:
     - The variable length `hop_payload` is prefixed with a `bigsize` encoding
       the length in bytes, excluding the prefix and the trailing HMAC.
 
-# Key Generation
+## Key Generation
 
 A number of encryption and verification keys are derived from the shared secret:
 
@@ -122,7 +122,7 @@ returned as the key.
 Notice that the key-type does not include a C-style `0x00`-termination-byte,
 e.g. the length of the _rho_ key-type is 3 bytes, not 4.
 
-# Pseudo Random Byte Stream
+## Pseudo Random Byte Stream
 
 The pseudo-random byte stream is used to obfuscate the packet at each hop of the
 path, so that each hop may only recover the address and HMAC of the next hop.
@@ -132,7 +132,7 @@ derived from the shared secret and a 96-bit zero-nonce (`0x000000000000000000000
 
 The use of a fixed nonce is safe, since the keys are never reused.
 
-# Packet Structure
+## Packet Structure
 
 The packet consists of four sections:
 
@@ -183,7 +183,7 @@ sending peer hasn't forwarded an ill-crafted HTLC.
 
 Since no `payload` TLV value can ever be shorter than 2 bytes, `length` values of 0 and 1 are reserved.  (`0` indicated a legacy format no longer supported, and `1` is reserved for future use).
 
-### `payload` format
+#### `payload` format
 
 This is formatted according to the Type-Length-Value format defined in [BOLT #1](01-messaging.md#type-length-value-format).
 
@@ -240,7 +240,7 @@ The requirements ensure consistency in responding to an unexpected
 `outgoing_cltv_value`, whether it is the final node or not, to avoid
 leaking its position in the route.
 
-### Requirements
+#### Requirements
 
 The creator of `encrypted_recipient_data` (usually, the recipient of payment):
 
@@ -343,7 +343,7 @@ The reader:
 Additional requirements are specified [here](#basic-multi-part-payments) for
 multi-part payments, and [here](#route-blinding) for blinded payments.
 
-### Basic Multi-Part Payments
+#### Basic Multi-Part Payments
 
 An HTLC may be part of a larger "multi-part" payment: such
 "base" atomic multipath payments will use the same `payment_hash` for
@@ -362,7 +362,7 @@ blinded paths for which the `payment_secret` doesn't make sense.
 `payment_metadata` is to be included in every payment part, so that
 invalid payment details can be detected as early as possible.
 
-#### Requirements
+##### Requirements
 
 The writer:
   - if the invoice offers the `basic_mpp` feature:
@@ -406,7 +406,7 @@ The final node:
     - if it fulfills any HTLCs in the HTLC set:
        - MUST fulfill the entire HTLC set.
 
-#### Rationale
+##### Rationale
 
 If `basic_mpp` is present it causes a delay to allow other partial
 payments to combine.  The total amount must be sufficient for the
@@ -634,12 +634,11 @@ Encrypted recipient data is created by the final recipient to give to the
 sender, containing instructions for the node on how to handle the message (it can also be created by the sender themselves: the node forwarding cannot tell).  It's used
 in both payment onions and onion messages onions.  See [Route Blinding](#route-blinding).
 
-
-# Accepting and Forwarding a Payment
+## Accepting and Forwarding a Payment
 
 Once a node has decoded the payload it either accepts the payment locally, or forwards it to the peer indicated as the next hop in the payload.
 
-## Non-strict Forwarding
+### Non-strict Forwarding
 
 A node MAY forward an HTLC along an outgoing channel other than the one
 specified by `short_channel_id`, so long as the receiver has the same node
@@ -648,7 +647,7 @@ nodes A and B, the HTLC can be forwarded across any channel connecting A and B.
 Failure to adhere will result in the receiver being unable to decrypt the next
 hop in the onion packet.
 
-### Rationale
+#### Rationale
 
 In the event that two peers have multiple channels, the downstream node will be
 able to decrypt the next hop payload regardless of which channel the packet is
@@ -669,7 +668,7 @@ Non-strict forwarding allows nodes to make use of private channels connecting
 them to the receiving node, even if the channel is not known in the public
 channel graph.
 
-### Recommendation
+#### Recommendation
 
 Implementations using non-strict forwarding should consider applying the same
 fee schedule to all channels with the same peer, as senders are likely to select
@@ -682,7 +681,7 @@ Alternatively, implementations may choose to apply non-strict forwarding only to
 like-policy channels to ensure their expected fee revenue does not deviate by
 using an alternate channel.
 
-## Payload for the Last Node
+### Payload for the Last Node
 
 When building the route, the origin node MUST use a payload for
 the final node with the following values:
@@ -705,7 +704,7 @@ compare its values against those of the HTLC. See the
 If not for the above, since it need not forward payments, the final node could
 simply discard its payload.
 
-# Shared Secret
+## Shared Secret
 
 The origin node establishes a shared secret with each hop along the route using
 Elliptic-curve Diffie-Hellman between the sender's ephemeral key at that hop and
@@ -722,7 +721,7 @@ during packet forwarding, the hop uses the ephemeral public key and its own
 node ID private key. Because of the properties of ECDH, they will both derive
 the same value.
 
-# Blinding Ephemeral Onion Keys
+## Blinding Ephemeral Onion Keys
 
 In order to ensure multiple hops along the route cannot be linked by the
 ephemeral public keys they see, the key is blinded at each hop. The blinding is
@@ -740,7 +739,7 @@ and the 32-byte shared secret. Concretely, it is the `SHA256` hash value of the
 concatenation of the public key serialized in its compressed format and the
 shared secret.
 
-# Packet Construction
+## Packet Construction
 
 In the following example, it's assumed that a _sending node_ (origin node),
 `n_0`, wants to route a packet to a _receiving node_ (final node), `n_r`.
@@ -894,7 +893,7 @@ func NewOnionPacket(paymentPath []*btcec.PublicKey, sessionKey *btcec.PrivateKey
 }
 ```
 
-# Onion Decryption
+## Onion Decryption
 
 There are two kinds of `onion_packet` we use:
 
@@ -903,7 +902,7 @@ There are two kinds of `onion_packet` we use:
 
 Those sections specify the `associated_data` to use, the `path_key` (if any), the extracted payload format and handling (including how to determine the next peer, if any), and how to handle errors.  The processing itself is identical.
 
-## Requirements
+### Requirements
 
 A reader:
   - if `version` is not 0:
@@ -959,7 +958,7 @@ A reader:
 
 In the case where blinded paths are used, the sender did not actually encrypt this onion for our `node_id`, but for a tweaked version: we can derive the tweak used from `path_key` which is given alongside the onion.  Then we either tweak our node private key the same way to decrypt the onion, or tweak to the onion ephemeral key which is mathematically equivalent.
 
-# Filler Generation
+## Filler Generation
 
 Upon receiving a packet, the processing node extracts the information destined
 for it from the route information and the per-hop payload.
@@ -1019,7 +1018,7 @@ Note that this example implementation is for demonstration purposes only; the
 The last hop need not obfuscate the `filler`, since it won't forward the packet
 any further and thus need not extract an HMAC either.
 
-# Returning Errors
+## Returning Errors
 
 The onion routing protocol includes a simple mechanism for returning encrypted
 error messages to the origin node.
@@ -1078,7 +1077,7 @@ de-anonymize elements of the blinded path. Thus the decision turn every
 error into `invalid_onion_blinding` which will be converted to a normal
 onion error by the introduction point.
 
-### Requirements
+#### Requirements
 
 The _erring node_:
   - MUST set `pad` such that the `failure_len` plus `pad_len` is at least 256.
@@ -1093,14 +1092,14 @@ The _origin node_:
     (maximum route length of tlv payload type).
     - SHOULD use constant `ammag` and `um` keys to obfuscate the route length.
 
-### Rationale
+#### Rationale
 
 The requirements for the _origin node_ should help hide the payment sender.
 By continuing decrypting 27 times (dummy decryption cycles after the error is found)
 the erroring node cannot learn its relative position in the route by performing
 a timing analysis if the sender were to retry the same route multiple times.
 
-## Failure Messages
+### Failure Messages
 
 The failure message encapsulated in `failuremsg` has an identical format as
 a normal message: a 2-byte type `failure_code` followed by data applicable
@@ -1295,7 +1294,7 @@ reasonable time.
 
 An error occurred within the blinded path.
 
-### Requirements
+#### Requirements
 
 An _erring node_:
   - if `path_key` is set in the incoming `update_add_htlc`:
@@ -1400,7 +1399,7 @@ An _intermediate hop_ MUST NOT, but the _final node_:
   - if it returns a `channel_update`:
     - MUST set `short_channel_id` to the `short_channel_id` used by the incoming onion.
 
-### Rationale
+#### Rationale
 
 In the case of multiple short_channel_id aliases, the `channel_update`
 `short_channel_id` should refer to the one the original sender is
@@ -1417,9 +1416,9 @@ transition away from including it. Nodes which do not provide a
 Some nodes may still use the `channel_update` for retries of the same payment,
 however.
 
-## Receiving Failure Codes
+### Receiving Failure Codes
 
-### Requirements
+#### Requirements
 
 The _origin node_:
   - MUST ignore any extra bytes in `failuremsg`.
@@ -1450,7 +1449,7 @@ The _origin node_:
   - MAY use the data specified in the various failure types for debugging
   purposes.
 
-# Onion Messages
+## Onion Messages
 
 Onion messages allow peers to use existing connections to query for
 invoices (see [BOLT 12](12-offer-encoding.md)).  Like gossip messages,
@@ -1471,7 +1470,7 @@ there is no error returned from intermediary nodes.
 
 For consistency, all onion messages use [Route Blinding](#route-blinding).
 
-## The `onion_message` Message
+### The `onion_message` Message
 
 1. type: 513 (`onion_message`) (`option_onion_messages`)
 2. data:
@@ -1520,7 +1519,7 @@ even, of course!).
     2. data:
         * [`tlv_invoice_error`:`inverr`]
 
-#### Requirements
+##### Requirements
 
 The creator of `encrypted_recipient_data` (usually, the recipient of the onion):
 
@@ -1592,7 +1591,7 @@ The reader:
       along `reply_path` `path`.
 
 
-#### Rationale
+##### Rationale
 
 Care must be taken that replies are only accepted using the exact
 reply_path given, otherwise probing is possible.  That means checking
@@ -1621,14 +1620,14 @@ Onion messages don't explicitly require a channel, but for
 spam-reduction a node may choose to ratelimit such peers, especially
 messages it is asked to forward.
 
-## `max_htlc_cltv` Selection
+### `max_htlc_cltv` Selection
 
 This `max_htlc_cltv` value is defined as 2016 blocks, based on historical value
 deployed by Lightning implementations.
 
-# Test Vector
+## Test Vector
 
-## Returning Errors
+### Returning Errors
 
 The test vectors use the following parameters:
 
@@ -1683,7 +1682,7 @@ The following is an in-depth trace of an example of error message creation:
 	stream = 3699fd352a948a05f604763c0bca2968d5eaca2b0118602e52e59121f050936c8dd90c24df7dc8cf8f1665e39a6c75e9e2c0900ea245c9ed3b0008148e0ae18bbfaea0c711d67eade980c6f5452e91a06b070bbde68b5494a92575c114660fb53cf04bf686e67ffa4a0f5ae41a59a39a8515cb686db553d25e71e7a97cc2febcac55df2711b6209c502b2f8827b13d3ad2f491c45a0cafe7b4d8d8810e805dee25d676ce92e0619b9c206f922132d806138713a8f69589c18c3fdc5acee41c1234b17ecab96b8c56a46787bba2c062468a13919afc18513835b472a79b2c35f9a91f38eb3b9e998b1000cc4a0dbd62ac1a5cc8102e373526d7e8f3c3a1b4bfb2f8a3947fe350cb89f73aa1bb054edfa9895c0fc971c2b5056dc8665902b51fced6dff80c4d247db977c15a710ce280fbd0ae3ca2a245b1c967aeb5a1a4a441c50bc9ceb33ca64b5ca93bd8b50060520f35a54a148a4112e8762f9d0b0f78a7f46a5f06c7a4b0845d020eb505c9e527aabab71009289a6919520d32af1f9f51ce4b3655c6f1aae1e26a16dc9aae55e9d4a6f91d4ba76e96fcb851161da3fc39d0d97ce30a5855c75ac2f613ff36a24801bcbd33f0ce4a3572b9a2fca21efb3b07897fc07ee71e8b1c0c6f8dbb7d2c4ed13f11249414fc94047d1a4a0be94d45db56af4c1a3bf39c9c5aa18209eaebb9e025f670d4c8cc1ee598c912db154eaa3d0c93cb3957e126c50486bf98c852ad326b5f80a19df6b2791f3d65b8586474f4c5dcb2aca0911d2257d1bb6a1e9fc1435be879e75d23290f9feb93ed40baaeca1c399fc91fb1da3e5f0f5d63e543a8d12fe6f7e654026d3a118ab58cb14bef9328d4af254215eb1f639828cc6405a3ab02d90bb70a798787a52c29b3a28fc67b0908563a65f08112abd4e9115cb01db09460c602aba3ddc375569dc3abe42c61c5ea7feb39ad8b05d8e2718e68806c0e1c34b0bc85492f985f8b3e76197a50d63982b780187078f5c59ebd814afaeffc7b2c6ee39d4f9c8c45fb5f685756c563f4b9d028fe7981b70752f5a31e44ba051ab40f3604c8596f1e95dc9b0911e7ede63d69b5eecd245fbecbcf233cf6eba842c0fec795a5adeab2100b1a1bc62c15046d48ec5709da4af64f59a2e552ddbbdcda1f543bb4b687e79f2253ff0cd9ba4e6bfae8e510e5147273d288fd4336dbd0b6617bf0ef71c0b4f1f9c1dc999c17ad32fe196b1e2b27baf4d59bba8e5193a9595bd786be00c32bae89c5dbed1e994fddffbec49d0e2d270bcc1068850e5d7e7652e274909b3cf5e3bc6bf64def0bbeac974a76d835e9a10bdd7896f27833232d907b7405260e3c986569bb8fdd65a55b020b91149f27bda9e63b4c2cc5370bcc81ef044a68c40c1b178e4265440334cc40f59ab5f82a022532805bfa659257c8d8ab9b4aef6abbd05de284c2eb165ef35737e3d387988c566f7b1ca0b1fc3e7b4ed991b77f23775e1c36a09a991384a33b78
 	error packet for node 0: 2dd2f49c1f5af0fcad371d96e8cddbdcd5096dc309c1d4e110f955926506b3c03b44c192896f45610741c85ed4074212537e0c118d472ff3a559ae244acd9d783c65977765c5d4e00b723d00f12475aafaafff7b31c1be5a589e6e25f8da2959107206dd42bbcb43438129ce6cce2b6b4ae63edc76b876136ca5ea6cd1c6a04ca86eca143d15e53ccdc9e23953e49dc2f87bb11e5238cd6536e57387225b8fff3bf5f3e686fd08458ffe0211b87d64770db9353500af9b122828a006da754cf979738b4374e146ea79dd93656170b89c98c5f2299d6e9c0410c826c721950c780486cd6d5b7130380d7eaff994a8503a8fef3270ce94889fe996da66ed121741987010f785494415ca991b2e8b39ef2df6bde98efd2aec7d251b2772485194c8368451ad49c2354f9d30d95367bde316fec6cbdddc7dc0d25e99d3075e13d3de0822669861dafcd29de74eac48b64411987285491f98d78584d0c2a163b7221ea796f9e8671b2bb91e38ef5e18aaf32c6c02f2fb690358872a1ed28166172631a82c2568d23238017188ebbd48944a147f6cdb3690d5f88e51371cb70adf1fa02afe4ed8b581afc8bcc5104922843a55d52acde09bc9d2b71a663e178788280f3c3eae127d21b0b95777976b3eb17be40a702c244d0e5f833ff49dae6403ff44b131e66df8b88e33ab0a58e379f2c34bf5113c66b9ea8241fc7aa2b1fa53cf4ed3cdd91d407730c66fb039ef3a36d4050dde37d34e80bcfe02a48a6b14ae28227b1627b5ad07608a7763a531f2ffc96dff850e8c583461831b19feffc783bc1beab6301f647e9617d14c92c4b1d63f5147ccda56a35df8ca4806b8884c4aa3c3cc6a174fdc2232404822569c01aba686c1df5eecc059ba97e9688c8b16b70f0d24eacfdba15db1c71f72af1b2af85bd168f0b0800483f115eeccd9b02adf03bdd4a88eab03e43ce342877af2b61f9d3d85497cd1c6b96674f3d4f07f635bb26add1e36835e321d70263b1c04234e222124dad30ffb9f2a138e3ef453442df1af7e566890aedee568093aa922dd62db188aa8361c55503f8e2c2e6ba93de744b55c15260f15ec8e69bb01048ca1fa7bbbd26975bde80930a5b95054688a0ea73af0353cc84b997626a987cc06a517e18f91e02908829d4f4efc011b9867bd9bfe04c5f94e4b9261d30cc39982eb7b250f12aee2a4cce0484ff34eebba89bc6e35bd48d3968e4ca2d77527212017e202141900152f2fd8af0ac3aa456aae13276a13b9b9492a9a636e18244654b3245f07b20eb76b8e1cea8c55e5427f08a63a16b0a633af67c8e48ef8e53519041c9138176eb14b8782c6c2ee76146b8490b97978ee73cd0104e12f483be5a4af414404618e9f6633c55dda6f22252cb793d3d16fae4f0e1431434e7acc8fa2c009d4f6e345ade172313d558a4e61b4377e31b8ed4e28f7cd13a7fe3f72a409bc3bdabfe0ba47a6d861e21f64d2fac706dab18b3e546df4
 
-# References
+## References
 
 [sphinx]: http://www.cypherpunks.ca/~iang/pubs/Sphinx_Oakland09.pdf
 [RFC2104]: https://tools.ietf.org/html/rfc2104
@@ -1691,7 +1690,7 @@ The following is an in-depth trace of an example of error message creation:
 [sec2]: http://www.secg.org/sec2-v2.pdf
 [rfc8439]: https://tools.ietf.org/html/rfc8439
 
-# Authors
+## Authors
 
 [ FIXME: ]
 

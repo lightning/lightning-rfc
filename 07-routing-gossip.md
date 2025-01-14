@@ -20,7 +20,7 @@ To support channel and node discovery, three *gossip messages* are supported:
    one valid `channel_announcement` for any channel, but at least two
    `channel_update` messages are expected.
 
-# Table of Contents
+## Table of Contents
 
   * [Definition of `short_channel_id`](#definition-of-short_channel_id)
   * [The `announcement_signatures` Message](#the-announcement_signatures-message)

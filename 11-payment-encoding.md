@@ -3,7 +3,7 @@
 A simple, extendable, QR-code-ready protocol for requesting payments
 over Lightning.
 
-# Table of Contents
+## Table of Contents
 
   * [Encoding Overview](#encoding-overview)
   * [Human-Readable Part](#human-readable-part)
@@ -16,7 +16,7 @@ over Lightning.
   * [Examples](#examples)
   * [Authors](#authors)
 
-# Encoding Overview
+## Encoding Overview
 
 The format for a Lightning invoice uses
 [bech32 encoding](https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki),
@@ -31,7 +31,7 @@ use 'lightning:' as a prefix before the BOLT-11 encoding (note: not
 as per BIP-21, with the key 'lightning' and the value equal to the BOLT-11
 encoding.
 
-## Requirements
+### Requirements
 
 A writer:
    - MUST encode the payment request in Bech32 (see BIP-0173)
@@ -44,7 +44,7 @@ A reader:
   - if the checksum is incorrect:
     - MUST fail the payment.
 
-# Human-Readable Part
+## Human-Readable Part
 
 The human-readable part of a Lightning invoice consists of two sections:
 1. `prefix`: `ln` + BIP-0173 currency prefix (e.g. `lnbc` for Bitcoin mainnet,
@@ -60,7 +60,7 @@ The following `multiplier` letters are defined:
 * `n` (nano): multiply by 0.000000001
 * `p` (pico): multiply by 0.000000000001
 
-## Requirements
+### Requirements
 
 A writer:
   - MUST encode `prefix` using the currency required for successful payment.
@@ -86,7 +86,7 @@ A reader:
       - if multiplier is `p` and the last decimal of `amount` is not 0:
 	    - MUST fail the payment.
 
-## Rationale
+### Rationale
 
 The `amount` is encoded into the human readable part, as it's fairly
 readable and a useful indicator of how much is being requested.
@@ -98,7 +98,7 @@ whatever is being offered in return.
 The `p` multiplier would allow to specify sub-millisatoshi amounts, which cannot be transferred on the network, since HTLCs are denominated in millisatoshis.
 Requiring a trailing `0` decimal ensures that the `amount` represents an integer number of millisatoshis.
 
-# Data Part
+## Data Part
 
 The data part of a Lightning invoice consists of multiple sections:
 
@@ -106,7 +106,7 @@ The data part of a Lightning invoice consists of multiple sections:
 1. zero or more tagged parts
 1. `signature`: Bitcoin-style signature of above (520 bits)
 
-## Requirements
+### Requirements
 
 A writer:
   - MUST set `timestamp` to the number of seconds since Midnight 1 January 1970, UTC in
@@ -120,14 +120,14 @@ A writer:
 A reader:
   - MUST check that the `signature` is valid (see the `n` tagged field specified below).
 
-## Rationale
+### Rationale
 
 `signature` covers an exact number of bytes even though the SHA2
 standard actually supports hashing in bit boundaries, because it's not widely
 implemented. The recovery ID allows public-key recovery, so the
 identity of the payee node can be implied.
 
-## Tagged Fields
+### Tagged Fields
 
 Each Tagged Field is of the form:
 
@@ -159,7 +159,7 @@ Currently defined tagged fields are:
   supported or required for receiving this payment.
   See [Feature Bits](#feature-bits).
 
-### Requirements
+#### Requirements
 
 A writer:
   - MUST include exactly one `p` field.
@@ -222,7 +222,8 @@ A reader:
     - MUST use an expiry delta of at least 18 when making the payment
   - if an `m` field is provided:
     - MUST use that as [`payment_metadata`](04-onion-routing.md#tlv_payload-payload-format)
-### Rationale
+
+#### Rationale
 
 The type-and-length format allows future extensions to be backward
 compatible. `data_length` is always a multiple of 5 bits, for easy
@@ -268,7 +269,7 @@ The `r` field allows limited routing assistance: as specified, it only
 allows minimum information to use private channels, however, it could also
 assist in future partial-knowledge routing.
 
-### Security Considerations for Payment Descriptions
+#### Security Considerations for Payment Descriptions
 
 Payment descriptions are user-defined and provide a potential avenue for
 injection attacks: during the processes of both rendering and persistence.
@@ -291,7 +292,7 @@ engines that support SQL or other dynamically interpreted querying languages.
 
 Don't be like the school of [Little Bobby Tables](https://xkcd.com/327/).
 
-## Feature Bits
+### Feature Bits
 
 Feature bits allow forward and backward compatibility, and follow the
 _it's ok to be odd_ rule.  Features appropriate for use in the `9` field
@@ -301,7 +302,7 @@ The field is big-endian.  The least-significant bit is numbered 0,
 which is _even_, and the next most significant bit is numbered 1,
 which is _odd_.
 
-### Requirements
+#### Requirements
 
 A writer:
   - MUST set the `9` field to a feature vector compliant with the
@@ -316,7 +317,7 @@ A reader:
     - MUST NOT use [Basic multi-part payments](04-onion-routing.md#basic-multi-part-payments).
 
 
-# Payer / Payee Interactions
+## Payer / Payee Interactions
 
 These are generally defined by the rest of the Lightning BOLT series,
 but it's worth noting that [BOLT #4](04-onion-routing.md#requirements-2) specifies that the payee SHOULD
@@ -332,7 +333,7 @@ If the payment succeeds but there is a later dispute, the payer can
 prove both the signed offer from the payee and the successful
 payment.
 
-## Payer / Payee Requirements
+### Payer / Payee Requirements
 
 A payer:
   - after the `timestamp` plus `expiry` has passed:
@@ -349,11 +350,11 @@ A payee:
   - after the `timestamp` plus `expiry` has passed:
     - SHOULD NOT accept a payment.
 
-# Implementation
+## Implementation
 
 https://github.com/rustyrussell/lightning-payencode
 
-# Examples
+## Examples
 
 NB: all the following examples are signed with `priv_key`=`e126f68f7eafcc8b74f54d269fe206be715000f94dac067d1c04a8ca3b2db734`.
 All invoices contain a `payment_secret`=`1111111111111111111111111111111111111111111111111111111111111111` unless otherwise noted.
@@ -739,9 +740,9 @@ Breakdown:
 * `7hf8he7ecf7n4ffphs6awl9t6676rrclv9ckg3d3ncn7fct63p6s365duk5wrk202cfy3aj5xnnp5gs3vrdvruverwwq7yzhkf5a3xqp`: signature
 * `d05wjc`: Bech32 checksum
 
-# Examples of Invalid Invoices
+## Examples of Invalid Invoices
 
-> # Same, but adding invalid unknown feature 100
+> ### Same, but adding invalid unknown feature 100
 > lnbc25m1pvjluezpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdq5vdhkven9v5sxyetpdeessp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygs9q4psqqqqqqqqqqqqqqqqsgqtqyx5vggfcsll4wu246hz02kp85x4katwsk9639we5n5yngc3yhqkm35jnjw4len8vrnqnf5ejh0mzj9n3vz2px97evektfm2l6wqccp3y7372
 
 Breakdown:
@@ -784,7 +785,7 @@ Breakdown:
 > ### Invalid sub-millisatoshi precision.
 > lnbc2500000001p1pvjluezpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqdq5xysxxatsyp3k7enxv4jsxqzpusp5zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygs9qrsgq0lzc236j96a95uv0m3umg28gclm5lqxtqqwk32uuk4k6673k6n5kfvx3d2h8s295fad45fdhmusm8sjudfhlf6dcsxmfvkeywmjdkxcp99202x
 
-# Authors
+## Authors
 
 [ FIXME: ]
 

@@ -8,7 +8,7 @@ used within the protocol to establish an encrypted and authenticated connection
 with peers, and also to authenticate any information advertised on behalf
 of a node.
 
-# Table of Contents
+## Table of Contents
 
   * [Cryptographic Messaging Overview](#cryptographic-messaging-overview)
     * [Authenticated Key Agreement Handshake](#authenticated-key-agreement-handshake)
@@ -506,19 +506,19 @@ Key rotation for a key `k` is performed according to the following steps:
 4. `k = k'`
 5. `ck = ck'`
 
-# Security Considerations
+## Security Considerations
 
 It is strongly recommended that existing, commonly-used, validated
 libraries be used for encryption and decryption, to avoid the many possible
 implementation pitfalls.
 
-# Appendix A: Transport Test Vectors
+## Appendix A: Transport Test Vectors
 
 To make a repeatable test handshake, the following specifies what `generateKey()` will
 return (i.e. the value for `e.priv`) for each side. Note that this
 is a violation of the spec, which requires randomness.
 
-## Initiator Tests
+### Initiator Tests
 
 The initiator SHOULD produce the given output when fed this input.
 The comments reflect internal states, for debugging purposes.
@@ -606,7 +606,7 @@ The comments reflect internal states, for debugging purposes.
     output: ERROR (ACT2_BAD_TAG)
 ```
 
-## Responder Tests
+### Responder Tests
 
 The responder SHOULD produce the given output when fed this input.
 
@@ -751,7 +751,7 @@ The responder SHOULD produce the given output when fed this input.
     output: ERROR (ACT3_BAD_TAG)
 ```
 
-## Message Encryption Tests
+### Message Encryption Tests
 
 In this test, the initiator sends length 5 messages containing "hello"
 1001 times. Only six example outputs are shown, for brevity and to test
@@ -776,16 +776,16 @@ two key rotations:
     output 1000: 0x4a2f3cc3b5e78ddb83dcb426d9863d9d9a723b0337c89dd0b005d89f8d3c05c52b76b29b740f09
     output 1001: 0x2ecd8c8a5629d0d02ab457a0fdd0f7b90a192cd46be5ecb6ca570bfc5e268338b1a16cf4ef2d36
 
-# Acknowledgments
+## Acknowledgments
 
 TODO(roasbeef); fin
 
-# References
+## References
 1. <a id="reference-1">https://tools.ietf.org/html/rfc8439</a>
 2. <a id="reference-2">http://noiseprotocol.org/noise.html</a>
 3. <a id="reference-3">https://tools.ietf.org/html/rfc5869</a>
 
-# Authors
+## Authors
 
 FIXME
 

@@ -3,7 +3,7 @@
 The peer channel protocol has three phases: establishment, normal
 operation, and closing.
 
-# Table of Contents
+## Table of Contents
 
   * [Channel](#channel)
     * [Definition of `channel_id`](#definition-of-channel_id)
@@ -47,9 +47,9 @@ operation, and closing.
     * [Message Retransmission: `channel_reestablish` message](#message-retransmission)
   * [Authors](#authors)
 
-# Channel
+## Channel
 
-## Definition of `channel_id`
+### Definition of `channel_id`
 
 Some messages use a `channel_id` to identify the channel. It's
 derived from the funding transaction by combining the `funding_txid`
@@ -69,7 +69,7 @@ transaction is confirmed are also not persistent - until you know the script
 pubkey corresponding to the funding output nothing prevents duplicative channel
 ids.
 
-### `channel_id`, v2
+#### `channel_id`, v2
 
 For channels established using the v2 protocol, the `channel_id` is the
 `SHA256(lesser-revocation-basepoint || greater-revocation-basepoint)`,
@@ -82,7 +82,7 @@ for the non-initiator.
 When sending `accept_channel2`, the `temporary_channel_id` from `open_channel2`
 must be used, to allow the initiator to match the response to its request.
 
-#### Rationale
+##### Rationale
 
 The revocation basepoints must be remembered by both peers for correct
 operation anyway. They're known after the first exchange of messages,
@@ -90,13 +90,13 @@ obviating the need for a `temporary_channel_id` in subsequent messages.
 By mixing information from both sides, they avoid `channel_id` collisions,
 and they remove the dependency on the funding txid.
 
-## Interactive Transaction Construction
+### Interactive Transaction Construction
 
 Interactive transaction construction allows two peers to collaboratively
 build a transaction for broadcast.  This protocol is the foundation
 for dual-funded channels establishment (v2).
 
-### Set-Up and Vocabulary
+#### Set-Up and Vocabulary
 
 There are two parties to a transaction construction: an *initiator*
 and a *non-initiator*.
@@ -111,7 +111,7 @@ The protocol makes the following assumptions:
 - The `nLocktime` for the transaction is known.
 - The `nVersion` for the transaction is known.
 
-### Fee Responsibility
+#### Fee Responsibility
 
 The *initiator* is responsible for paying the fees for the following fields,
 to be referred to as the `common fields`.
@@ -126,7 +126,7 @@ The rest of the transaction bytes' fees are the responsibility of
 the peer who contributed that input or output via `tx_add_input` or
 `tx_add_output`, at the agreed upon `feerate`.
 
-### Overview
+#### Overview
 
 The *initiator* initiates the interactive transaction construction
 protocol with `tx_add_input`. The *non-initiator* responds with any
@@ -150,7 +150,7 @@ necessary to satisfy the parity requirement.
 
 Here are a few example exchanges.
 
-#### *initiator* only
+##### *initiator* only
 
 A, the *initiator*, has two inputs and an output (the funding output).
 B, the *non-initiator* has nothing to contribute.
@@ -165,7 +165,7 @@ B, the *non-initiator* has nothing to contribute.
         |       |--(7)- tx_complete --->|       |
         +-------+                       +-------+
 
-#### *initiator* and *non-initiator*
+##### *initiator* and *non-initiator*
 
 A, the *initiator*, contributes 2 inputs and an output that they
 then remove.  B, the *non-initiator*, contributes 1 input and an output,
@@ -187,7 +187,7 @@ B's contributions.
         |       |<-(10) tx_complete ------|       |
         +-------+                         +-------+
 
-### The `tx_add_input` Message
+#### The `tx_add_input` Message
 
 This message contains a transaction input.
 
@@ -200,7 +200,7 @@ This message contains a transaction input.
     * [`u32`:`prevtx_vout`]
     * [`u32`:`sequence`]
 
-#### Requirements
+##### Requirements
 
 The sending node:
   - MUST add all sent inputs to the transaction
@@ -226,7 +226,7 @@ The receiving node:
     - the `serial_id` has the wrong parity
     - if has received 4096 `tx_add_input` messages during this negotiation
 
-#### Rationale
+##### Rationale
 
 Each node must know the set of the transaction inputs. The *non-initiator*
 MAY omit this message.
@@ -243,7 +243,7 @@ this input spends. Used to verify that the input is non-malleable.
 replaceability, and the same value should be used across implementations
 to avoid on-chain fingerprinting.
 
-#### Liquidity griefing
+##### Liquidity griefing
 
 When sending `tx_add_input`, senders have no guarantee that the remote node
 will complete the protocol in a timely manner. Malicious remote nodes could
@@ -265,7 +265,7 @@ with honest nodes. This is a reasonable trade-off though because:
   conflicts
 * failed attempts can simply be retried at no cost
 
-### The `tx_add_output` Message
+#### The `tx_add_output` Message
 
 This message adds a transaction output.
 
@@ -277,7 +277,7 @@ This message adds a transaction output.
     * [`u16`:`scriptlen`]
     * [`scriptlen*byte`:`script`]
 
-#### Requirements
+##### Requirements
 
 Either node:
   - MAY omit this message
@@ -300,7 +300,7 @@ The receiving node:
     - the `sats` amount is less than the `dust_limit`
     - the `sats` amount is greater than 2,100,000,000,000,000 (`MAX_MONEY`)
 
-#### Rationale
+##### Rationale
 
 Each node must know the set of the transaction outputs.
 
@@ -314,7 +314,7 @@ Outputs in the constructed transaction MUST be sorted by `serial_id`.
 scripts such as `OP_RETURN` may be accepted, but the corresponding
 transaction may fail to relay across the network.
 
-### The `tx_remove_input` and `tx_remove_output` Messages
+#### The `tx_remove_input` and `tx_remove_output` Messages
 
 This message removes an input from the transaction.
 
@@ -330,7 +330,7 @@ This message removes an output from the transaction.
     * [`channel_id`:`channel_id`]
     * [`u64`:`serial_id`]
 
-#### Requirements
+##### Requirements
 
 The sending node:
   - MUST NOT send a `tx_remove` with a `serial_id` it did not add
@@ -352,7 +352,7 @@ contributions.
 2. data:
     * [`channel_id`:`channel_id`]
 
-#### Requirements
+##### Requirements
 
 The nodes:
   - MUST send this message in succession to conclude this protocol
@@ -371,7 +371,7 @@ The receiving node:
     - there are more than 252 outputs
     - the estimated weight of the tx is greater than 400,000 (`MAX_STANDARD_TX_WEIGHT`)
 
-#### Rationale
+##### Rationale
 
 To signal the conclusion of exchange of transaction inputs and outputs.
 
@@ -384,7 +384,7 @@ For the `minimum fee` calculation see [BOLT #3](03-transactions.md#calculating-f
 The maximum inputs and outputs are capped at 252. This effectively fixes
 the byte size of the input and output counts on the transaction to one (1).
 
-### The `tx_signatures` Message
+#### The `tx_signatures` Message
 
 1. type: 71 (`tx_signatures`)
 2. data:
@@ -398,7 +398,7 @@ the byte size of the input and output counts on the transaction to one (1).
     * [`u16`:`len`]
     * [`len*byte`:`witness_data`]
 
-#### Requirements
+##### Requirements
 
 The sending node:
   - if it has the lowest total satoshis contributed, as defined by total
@@ -421,7 +421,7 @@ The receiving node:
   - SHOULD apply the `witnesses` to the transaction and broadcast it
   - MUST reply with their `tx_signatures` if not already transmitted
 
-#### Rationale
+##### Rationale
 
 A strict ordering is used to decide which peer sends `tx_signatures` first.
 This prevents deadlocks where each peer is waiting for the other peer to
@@ -435,7 +435,7 @@ it is possible for the fee for the exchanged witness data to be underpaid.
 It is the responsibility of the sending peer to correctly account for the
 required fee.
 
-### The `tx_init_rbf` Message
+#### The `tx_init_rbf` Message
 
 This message initiates a replacement of the transaction after it's been
 completed.
@@ -454,7 +454,7 @@ completed.
         * [`s64`:`satoshis`]
    1. type: 2 (`require_confirmed_inputs`)
 
-#### Requirements
+##### Requirements
 
 The sender:
   - MUST set `feerate` greater than or equal to 25/24 times the `feerate`
@@ -473,7 +473,7 @@ The recipient:
   - MUST fail the negotiation if:
     - `require_confirmed_inputs` is set but it cannot provide confirmed inputs
 
-#### Rationale
+##### Rationale
 
 `feerate` is the feerate this transaction will pay. It must be at least
 1/24 greater than the last used `feerate`, rounded down to the nearest
@@ -491,7 +491,7 @@ such an output. Note that it may be different from the contribution
 made in the previously completed transaction. If omitted, the sender is
 not contributing to the funding output.
 
-### The `tx_ack_rbf` Message
+#### The `tx_ack_rbf` Message
 
 1. type: 73 (`tx_ack_rbf`)
 2. data:
@@ -506,7 +506,7 @@ not contributing to the funding output.
         * [`s64`:`satoshis`]
    1. type: 2 (`require_confirmed_inputs`)
 
-#### Requirements
+##### Requirements
 
 The sender:
   - If it contributes to the transaction's funding output:
@@ -520,7 +520,7 @@ The recipient:
   - MUST fail the negotiation if:
     - `require_confirmed_inputs` is set but it cannot provide confirmed inputs
 
-#### Rationale
+##### Rationale
 
 `funding_output_contribution` is the amount of satoshis that this peer
 will contribute to the funding output of the transaction, when there is
@@ -533,7 +533,7 @@ a large feerate change, instead stop contributing to the funding output,
 and decline to participate further in the transaction (by not contributing,
 they may obtain incoming liquidity at no cost).
 
-### The `tx_abort` Message
+#### The `tx_abort` Message
 
 1. type: 74 (`tx_abort`)
 2. data:
@@ -541,7 +541,7 @@ they may obtain incoming liquidity at no cost).
    * [`u16`:`len`]
    * [`len*byte`:`data`]
 
-#### Requirements
+##### Requirements
 
 A sending node:
   - MUST NOT have already transmitted `tx_signatures`
@@ -564,7 +564,7 @@ A receiving node:
     126, inclusive):
     - SHOULD NOT print out `data` verbatim.
 
-#### Rationale
+##### Rationale
 
 A receiving node, if they've already sent their `tx_signatures` has no guarantee
 that the transaction won't be signed and published by their peer. They must remember
@@ -579,7 +579,7 @@ Echoing back `tx_abort` allows the peer to ack that they've seen the abort messa
 permitting the originating peer to terminate the in-flight process without
 worrying about stale messages.
 
-## Channel Establishment v1
+### Channel Establishment v1
 
 After authenticating and initializing a connection ([BOLT #8](08-transport.md)
 and [BOLT #1](01-messaging.md#the-init-message), respectively), channel establishment may begin.
@@ -631,7 +631,7 @@ messages are identified by either a `temporary_channel_id` (before the
 funding transaction is created) or a `channel_id` (derived from the
 funding transaction).
 
-### The `open_channel` Message
+#### The `open_channel` Message
 
 This message contains information about a node and indicates its
 desire to set up a new channel. This is the first step toward creating
@@ -734,7 +734,7 @@ know this node will accept `funding_satoshis` greater than or equal to 2^24.
 Since it's broadcast in the `node_announcement` message other nodes can use it to identify peers 
 willing to accept large channel even before exchanging the `init` message with them. 
 
-#### Defined Channel Types
+##### Defined Channel Types
 
 Channel types are an explicit enumeration: for convenience of future
 definitions they reuse even feature bits, but they are not an
@@ -749,7 +749,7 @@ Each basic type has the following variations allowed:
   - `option_scid_alias` (bit 46)
   - `option_zeroconf` (bit 50)
 
-#### Requirements
+##### Requirements
 
 The sending node:
   - MUST ensure the `chain_hash` value identifies the chain it wishes to open the channel within.
@@ -823,7 +823,7 @@ are not valid secp256k1 pubkeys in compressed format.
 The receiving node MUST NOT:
   - consider funds received, using `push_msat`, to be received until the funding transaction has reached sufficient depth.
 
-#### Rationale
+##### Rationale
 
 The requirement for `funding_satoshis` to be less than 2^24 satoshi was a temporary self-imposed limit while implementations were not yet considered stable, it can be lifted by advertising `option_support_large_channel`.
 
@@ -847,7 +847,7 @@ of dust htlcs, which effectively become miner fees.
 
 Details for how to handle a channel failure can be found in [BOLT 5:Failing a Channel](05-onchain.md#failing-a-channel).
 
-### The `accept_channel` Message
+#### The `accept_channel` Message
 
 This message contains information about a node and indicates its
 acceptance of the new channel. This is the second step toward creating the
@@ -880,7 +880,7 @@ funding transaction and both versions of the commitment transaction.
     2. data:
         * [`...*byte`:`type`]
 
-#### Requirements
+##### Requirements
 
 The `temporary_channel_id` MUST be the same as the `temporary_channel_id` in
 the `open_channel` message.
@@ -909,7 +909,7 @@ The receiver:
 
 Other fields have the same requirements as their counterparts in `open_channel`.
 
-### The `funding_created` Message
+#### The `funding_created` Message
 
 This message describes the outpoint which the funder has created for
 the initial commitment transactions. After receiving the peer's
@@ -922,7 +922,7 @@ signature, via `funding_signed`, it will broadcast the funding transaction.
     * [`u16`:`funding_output_index`]
     * [`signature`:`signature`]
 
-#### Requirements
+##### Requirements
 
 The sender MUST set:
   - `temporary_channel_id` the same as the `temporary_channel_id` in the `open_channel` message.
@@ -941,7 +941,7 @@ The recipient:
     - MUST send a `warning` and close the connection, or send an
       `error` and fail the channel.
 
-#### Rationale
+##### Rationale
 
 The `funding_output_index` can only be 2 bytes, since that's how it's packed into the `channel_id` and used throughout the gossip protocol. The limit of 65535 outputs should not be overly burdensome.
 
@@ -950,7 +950,7 @@ A transaction with all Segregated Witness inputs is not malleable, hence the fun
 The funder may use CPFP on a change output to ensure that the funding transaction confirms before 2016 blocks,
 otherwise the fundee may forget that channel.
 
-### The `funding_signed` Message
+#### The `funding_signed` Message
 
 This message gives the funder the signature it needs for the first
 commitment transaction, so it can broadcast the transaction knowing that funds
@@ -963,7 +963,7 @@ This message introduces the `channel_id` to identify the channel. It's derived f
     * [`channel_id`:`channel_id`]
     * [`signature`:`signature`]
 
-#### Requirements
+##### Requirements
 
 Both peers:
   - if `channel_type` was present in both `open_channel` and `accept_channel`:
@@ -987,7 +987,7 @@ The recipient:
   - on receipt of a valid `funding_signed`:
     - SHOULD broadcast the funding transaction.
 
-#### Rationale
+##### Rationale
 
 We decide on `option_static_remotekey` or `option_anchors` at this point
 when we first have to generate the commitment transaction. The feature
@@ -1000,7 +1000,7 @@ parameter, this channel will continue to use `option_static_remotekey` or
 `option_anchors` is considered superior to `option_static_remotekey`,
 and the superior one is favored if more than one is negotiated.
 
-### The `channel_ready` Message
+#### The `channel_ready` Message
 
 This message (which used to be called `funding_locked`) indicates that the funding transaction has sufficient confirms for channel use. Once both nodes have sent this, the channel enters normal operating mode.
 
@@ -1019,7 +1019,7 @@ accepter would usually wait until the funding has reached the `minimum_depth` as
     2. data:
         * [`short_channel_id`:`alias`]
 
-#### Requirements
+##### Requirements
 
 The sender:
   - MUST NOT send `channel_ready` unless outpoint of given by `funding_txid` and
@@ -1064,7 +1064,7 @@ From the point of waiting for `channel_ready` onward, either node MAY
 send an `error` and fail the channel if it does not receive a required response from the
 other node after a reasonable timeout.
 
-#### Rationale
+##### Rationale
 
 The non-funder can simply forget the channel ever existed, since no
 funds are at risk. If the fundee were to remember the channel forever, this
@@ -1090,7 +1090,7 @@ incoming HTLCs.  The recipient only need remember one, for use in
 If an RBF negotiation is in progress when a `channel_ready` message is
 exchanged, the negotiation must be abandoned.
 
-## Channel Establishment v2
+### Channel Establishment v2
 
 This is a revision of the channel establishment protocol.
 It changes the previous protocol to allow the `accept_channel2` peer
@@ -1127,7 +1127,7 @@ transaction, via the interactive transaction construction protocol.
         - where node A is *opener*/*initiator* and node B is
           *accepter*/*non-initiator*
 
-### The `open_channel2` Message
+#### The `open_channel2` Message
 
 This message initiates the v2 channel establishment workflow.
 
@@ -1167,7 +1167,7 @@ This message initiates the v2 channel establishment workflow.
 Rationale and Requirements are the same as for [`open_channel`](#the-open_channel-message),
 with the following additions.
 
-#### Requirements
+##### Requirements
 
 If nodes have negotiated `option_dual_fund`:
   - the opening node:
@@ -1185,7 +1185,7 @@ The receiving node:
   - MUST fail the negotiation if:
     - `require_confirmed_inputs` is set but it cannot provide confirmed inputs
 
-#### Rationale
+##### Rationale
 
 `temporary_channel_id` MUST be derived using a zeroed out basepoint for the
 peer's revocation basepoint. This allows the peer to return channel-assignable
@@ -1217,7 +1217,7 @@ The sending node may require the other participant to only use confirmed inputs.
 This ensures that the sending node doesn't end up paying the fees of a low
 feerate unconfirmed ancestor of one of the other participant's inputs.
 
-### The `accept_channel2` Message
+#### The `accept_channel2` Message
 
 This message contains information about a node and indicates its
 acceptance of the new channel.
@@ -1255,7 +1255,7 @@ Rationale and Requirements are the same as listed above,
 for [`accept_channel`](#the-accept_channel-message) with the following
 additions.
 
-#### Requirements
+##### Requirements
 
 The accepting node:
   - MUST use the `temporary_channel_id` of the `open_channel2` message
@@ -1267,7 +1267,7 @@ The receiving node:
   - MUST fail the negotiation if:
     - `require_confirmed_inputs` is set but it cannot provide confirmed inputs
 
-#### Rationale
+##### Rationale
 
 The `funding_satoshis` is the amount of bitcoin in satoshis
 the *accepter* will be contributing to the channel's funding transaction.
@@ -1278,35 +1278,35 @@ Instead, the channel reserve is fixed at 1% of the total channel balance
 rounded down to the nearest whole satoshi or the `dust_limit_satoshis`,
 whichever is greater.
 
-### Funding Composition
+#### Funding Composition
 
 Funding composition for channel establishment v2 makes use of the
 [Interactive Transaction Construction](#interactive-transaction-construction)
 protocol, with the following additional caveats.
 
-#### The `tx_add_input` Message
+##### The `tx_add_input` Message
 
-##### Requirements
+###### Requirements
 
 The sending node:
   - if the receiver set `require_confirmed_inputs` in `open_channel2`,
     `accept_channel2`, `tx_init_rbf` or `tx_ack_rbf`:
     - MUST NOT send a `tx_add_input` that contains an unconfirmed input
 
-#### The `tx_add_output` Message
+##### The `tx_add_output` Message
 
-##### Requirements
+###### Requirements
 
 The sending node:
   - if is the *opener*:
     - MUST send at least one `tx_add_output`,  which contains the
       channel's funding output
 
-##### Rationale
+###### Rationale
 
 The channel funding output must be added by the *opener*, who pays its fees.
 
-#### The `tx_complete` Message
+##### The `tx_complete` Message
 
 Upon receipt of consecutive `tx_complete`s, the receiving node:
   - if is the *accepter*:
@@ -1327,7 +1327,7 @@ Upon receipt of consecutive `tx_complete`s, the receiving node:
     - MUST fail the negotiation if:
       - one of the inputs added by the other peer is unconfirmed
 
-### The `commitment_signed` Message
+#### The `commitment_signed` Message
 
 This message is exchanged by both peers. It contains the signatures for
 the first commitment transaction.
@@ -1335,7 +1335,7 @@ the first commitment transaction.
 Rationale and Requirements are the same as listed below,
 for [`commitment_signed`](#committing-updates-so-far-commitment_signed) with the following additions.
 
-#### Requirements
+##### Requirements
 
 The sending node:
   - MUST send zero HTLCs.
@@ -1350,7 +1350,7 @@ The receiving node:
     - MUST send `tx_signatures` if it should sign first, as specified
       in the [`tx_signatures` requirements](#the-tx_signatures-message)
 
-#### Rationale
+##### Rationale
 
 The first commitment transaction has no HTLCs.
 
@@ -1358,7 +1358,7 @@ Once peers are ready to exchange commitment signatures, they must remember
 the details of the funding transaction to allow resuming the signatures
 exchange if a disconnection happens.
 
-### Sharing funding signatures: `tx_signatures`
+#### Sharing funding signatures: `tx_signatures`
 
 After a valid `commitment_signed` has been received
 from the peer and a `commitment_signed` has been sent, a peer:
@@ -1366,7 +1366,7 @@ from the peer and a `commitment_signed` has been sent, a peer:
     transaction, following the order specified in the
     [`tx_signatures` requirements](#the-tx_signatures-message)
 
-#### Requirements
+##### Requirements
 
 The sending node:
   - MUST verify it has received a valid commitment signature from its peer
@@ -1387,7 +1387,7 @@ The receiving node:
       opportunity to do so; effectively canceling this channel open
   - SHOULD apply `witnesses` to the funding transaction and broadcast it
 
-#### Rationale
+##### Rationale
 
 A peer sends their `tx_signatures` after receiving a valid `commitment_signed`
 message, following the order specified in the [`tx_signatures` section](#the-tx_signatures-message).
@@ -1398,12 +1398,12 @@ should be considered failed and the channel should be double-spent when
 there is a productive opportunity to do so. This should disincentivize
 peers from underpaying fees.
 
-### Fee bumping: `tx_init_rbf` and `tx_ack_rbf`
+#### Fee bumping: `tx_init_rbf` and `tx_ack_rbf`
 
 After the funding transaction has been broadcast, it can be replaced by
 a transaction paying more fees to make the channel confirm faster.
 
-#### Requirements
+##### Requirements
 
 The sender of `tx_init_rbf`:
   - MUST be the *initiator*
@@ -1414,7 +1414,7 @@ The recipient:
     `channel_ready`
   - MAY fail the negotiation for any reason
 
-#### Rationale
+##### Rationale
 
 If a valid `channel_ready` message is received in the middle of an
 RBF attempt, the attempt MUST be abandoned.
@@ -1429,7 +1429,7 @@ a large feerate change, instead sets their `sats` to zero, and decline to
 participate further in the channel funding: by not contributing, they
 may obtain incoming liquidity at no cost.
 
-## Channel Quiescence
+### Channel Quiescence
 
 Various fundamental changes, in particular protocol upgrades, are
 easiest on channels where both commitment transactions match, and no
@@ -1497,7 +1497,7 @@ channel state significantly more complex to maintain. This introduces the
 derivative property that it is impossible to batch multiple downstream protocols
 in the same quiescence session.
 
-## Channel Close
+### Channel Close
 
 Nodes can negotiate a mutual close of the connection, which unlike a
 unilateral close, allows them to access their funds immediately and
@@ -1521,7 +1521,7 @@ Closing happens in two stages:
         |       |<-(?)-- closing_signed  Fn----|       |
         +-------+                              +-------+
 
-### Closing Initiation: `shutdown`
+#### Closing Initiation: `shutdown`
 
 Either node (or both) can send a `shutdown` message to initiate closing,
 along with the `scriptpubkey` it wants to be paid to.
@@ -1532,7 +1532,7 @@ along with the `scriptpubkey` it wants to be paid to.
    * [`u16`:`len`]
    * [`len*byte`:`scriptpubkey`]
 
-#### Requirements
+##### Requirements
 
 A sending node:
   - if it hasn't sent a `funding_created` (if it is a funder) or a `funding_signed` (if it is a fundee):
@@ -1569,7 +1569,7 @@ A receiving node:
     - MAY send a `warning`.
     - MUST fail the connection.
 
-#### Rationale
+##### Rationale
 
 If channel state is always "clean" (no pending changes) when a
 shutdown starts, the question of how to behave if it wasn't is avoided:
@@ -1599,7 +1599,7 @@ of the receiving node to change the `scriptpubkey`.
 
 The `shutdown` response requirement implies that the node sends `commitment_signed` to commit any outstanding changes before replying; however, it could theoretically reconnect instead, which would simply erase all outstanding uncommitted changes.
 
-### Closing Negotiation: `closing_signed`
+#### Closing Negotiation: `closing_signed`
 
 Once shutdown is complete, the channel is empty of HTLCs, there are no commitments
 for which a revocation is owed, and all updates are included on both commitments,
@@ -1630,7 +1630,7 @@ reply with the same value (completing after three messages).
         * [`u64`:`min_fee_satoshis`]
         * [`u64`:`max_fee_satoshis`]
 
-#### Requirements
+##### Requirements
 
 The funding node:
   - after `shutdown` has been received, AND no HTLCs remain in either commitment transaction:
@@ -1691,7 +1691,7 @@ The receiving node:
   - if one of the outputs in the closing transaction is below the dust limit for its `scriptpubkey` (see [BOLT 3](03-transactions.md#dust-limits)):
     - MUST fail the channel
 
-#### Rationale
+##### Rationale
 
 When `fee_range` is not provided, the "strictly between" requirement ensures
 that forward progress is made, even if only by a single satoshi at a time.
@@ -1713,7 +1713,7 @@ satoshis, which is possible if `dust_limit_satoshis` is below 546 satoshis).
 No funds are at risk when that happens, but the channel must be force-closed as
 the closing transaction will likely never reach miners.
 
-## Normal Operation
+### Normal Operation
 
 Once both nodes have exchanged `channel_ready` (and optionally [`announcement_signatures`](07-routing-gossip.md#the-announcement_signatures-message)), the channel can be used to make payments via Hashed Time Locked Contracts.
 
@@ -1755,7 +1755,7 @@ transactions may be out of sync indefinitely. This is not concerning:
 what matters is whether both sides have irrevocably committed to a
 particular update or not (the final state, above).
 
-### Forwarding HTLCs
+#### Forwarding HTLCs
 
 In general, a node offers HTLCs for two reasons: to initiate a payment of its own,
 or to forward another node's payment. In the forwarding case, care must
@@ -1769,7 +1769,7 @@ previous commitment transaction **without/with** it has been revoked, OR
 2. The commitment transaction **with/without** it has been irreversibly committed to
 the blockchain.
 
-#### Requirements
+##### Requirements
 
 A node:
   - until an incoming HTLC has been irrevocably committed:
@@ -1784,7 +1784,7 @@ to that outgoing HTLC.
   - upon receiving an `update_fulfill_htlc` for an outgoing HTLC, OR upon discovering the `payment_preimage` from an on-chain HTLC spend:
     - MUST fulfill the incoming HTLC that corresponds to that outgoing HTLC.
 
-#### Rationale
+##### Rationale
 
 In general, one side of the exchange needs to be dealt with before the other.
 Fulfilling an HTLC is different: knowledge of the preimage is, by definition,
@@ -1795,7 +1795,7 @@ An HTLC with an unreasonably long expiry is a denial-of-service vector and
 therefore is not allowed. Note that the exact value of "unreasonable" is currently unclear
 and may depend on network topology.
 
-### `cltv_expiry_delta` Selection
+#### `cltv_expiry_delta` Selection
 
 Once an HTLC has timed out, it can either be fulfilled or timed-out;
 care must be taken around this transition, both for offered and received HTLCs.
@@ -1888,7 +1888,7 @@ There are four values that need be derived:
    1-3 above don't apply). The default in [BOLT #11](11-payment-encoding.md) is
    18, which matches this calculation.
 
-#### Requirements
+##### Requirements
 
 An offering node:
   - MUST estimate a timeout deadline for each HTLC it offers.
@@ -1907,7 +1907,7 @@ A fulfilling node:
     - SHOULD send an `error` to the offering peer (if connected).
     - MUST fail the channel.
 
-### Bounding exposure to trimmed in-flight HTLCs: `max_dust_htlc_exposure_msat`
+#### Bounding exposure to trimmed in-flight HTLCs: `max_dust_htlc_exposure_msat`
 
 When an HTLC in a channel is below the "trimmed" threshold in [BOLT3 #3](03-transactions.md),
 the HTLC cannot be claimed on-chain, instead being turned into additional miner
@@ -1953,7 +1953,7 @@ For channels that don't use `option_anchors`, an increase of
 the `feerate_per_kw` may trim multiple htlcs from commitment transactions,
 which could create a large increase in dust exposure.
 
-### Adding an HTLC: `update_add_htlc`
+#### Adding an HTLC: `update_add_htlc`
 
 Either node can send `update_add_htlc` to offer an HTLC to the other,
 which is redeemable in return for a payment preimage. Amounts are in
@@ -1979,7 +1979,7 @@ is destined, is described in [BOLT #4](04-onion-routing.md).
     2. data:
         * [`point`:`path_key`]
 
-#### Requirements
+##### Requirements
 
 A sending node:
   - if it is _responsible_ for paying the Bitcoin fee:
@@ -2052,7 +2052,7 @@ The `onion_routing_packet` contains an obfuscated list of hops and instructions 
 It commits to the HTLC by setting the `payment_hash` as associated data, i.e. includes the `payment_hash` in the computation of HMACs.
 This prevents replay attacks that would reuse a previous `onion_routing_packet` with a different `payment_hash`.
 
-#### Rationale
+##### Rationale
 
 Invalid amounts are a clear protocol violation and indicate a breakdown.
 
@@ -2082,7 +2082,7 @@ maintaining its channel reserve (because of the increased weight of the
 commitment transaction), resulting in a degraded channel. See [#728](https://github.com/lightningnetwork/lightning-rfc/issues/728)
 for more details.
 
-### Removing an HTLC: `update_fulfill_htlc`, `update_fail_htlc`, and `update_fail_malformed_htlc`
+#### Removing an HTLC: `update_fulfill_htlc`, `update_fail_htlc`, and `update_fail_malformed_htlc`
 
 For simplicity, a node can only remove HTLCs added by the other node.
 There are four reasons for removing an HTLC: the payment preimage is supplied,
@@ -2120,7 +2120,7 @@ For an unparsable HTLC:
    * [`sha256`:`sha256_of_onion`]
    * [`u16`:`failure_code`]
 
-#### Requirements
+##### Requirements
 
 A node:
   - SHOULD remove an HTLC as soon as it can.
@@ -2163,7 +2163,7 @@ A receiving node:
       originally sent the HTLC, using the `failure_code` given and setting the
       data to `sha256_of_onion`.
 
-#### Rationale
+##### Rationale
 
 A node that doesn't time out HTLCs risks channel failure (see
 [`cltv_expiry_delta` Selection](#cltv_expiry_delta-selection)).
@@ -2184,7 +2184,7 @@ such detection is left as an option.
 Nodes inside a blinded route must use `invalid_onion_blinding` to avoid
 leaking information to senders trying to probe the blinded route.
 
-### Committing Updates So Far: `commitment_signed`
+#### Committing Updates So Far: `commitment_signed`
 
 When a node has changes for the remote commitment, it can apply them,
 sign the resulting transaction (as defined in [BOLT #3](03-transactions.md)), and send a
@@ -2197,7 +2197,7 @@ sign the resulting transaction (as defined in [BOLT #3](03-transactions.md)), an
    * [`u16`:`num_htlcs`]
    * [`num_htlcs*signature`:`htlc_signature`]
 
-#### Requirements
+##### Requirements
 
 A sending node:
   - MUST NOT send a `commitment_signed` message that does not include any
@@ -2227,7 +2227,7 @@ A receiving node:
       `error` and fail the channel.
   - MUST respond with a `revoke_and_ack` message.
 
-#### Rationale
+##### Rationale
 
 There's little point offering spam updates: it implies a bug.
 
@@ -2248,7 +2248,7 @@ stating time-locks on HTLC outputs.
 The `option_anchors` allows HTLC transactions to "bring their own fees" by
 attaching other inputs and outputs, hence the modified signature flags.
 
-### Completing the Transition to the Updated State: `revoke_and_ack`
+#### Completing the Transition to the Updated State: `revoke_and_ack`
 
 Once the recipient of `commitment_signed` checks the signature and knows
 it has a valid new commitment transaction, it replies with the commitment
@@ -2268,7 +2268,7 @@ The description of key derivation is in [BOLT #3](03-transactions.md#key-derivat
    * [`32*byte`:`per_commitment_secret`]
    * [`point`:`next_per_commitment_point`]
 
-#### Requirements
+##### Requirements
 
 A sending node:
   - MUST set `per_commitment_secret` to the secret used to generate keys for
@@ -2290,7 +2290,7 @@ A node:
   them (due to a failed connection),
     - Note: this is to reduce the above risk.
 
-### Updating Fees: `update_fee`
+#### Updating Fees: `update_fee`
 
 An `update_fee` message is sent by the node which is paying the
 Bitcoin fee. Like any update, it's first committed to the receiver's
@@ -2312,7 +2312,7 @@ given in [BOLT #3](03-transactions.md#fee-calculation).
    * [`channel_id`:`channel_id`]
    * [`u32`:`feerate_per_kw`]
 
-#### Requirements
+##### Requirements
 
 The node _responsible_ for paying the Bitcoin fee:
   - SHOULD send `update_fee` to ensure the current fee rate is sufficient (by a
@@ -2350,7 +2350,7 @@ A receiving node:
       - if the dust balance of the local transaction at the updated `feerate_per_kw` is greater than `max_dust_htlc_exposure_msat`:
           - MAY fail the channel
 
-#### Rationale
+##### Rationale
 
 Bitcoin fees are required for unilateral closes to be effective.
 With `option_anchors`, `feerate_per_kw` is not as critical anymore to guarantee
@@ -2377,7 +2377,7 @@ be trimmed at the updated feerate, this could overflow the configured
 `max_dust_htlc_exposure_msat`. Whether to close the channel preemptively
 or not is left as a matter of node policy.
 
-## Message Retransmission
+### Message Retransmission
 
 Because communication transports are unreliable, and may need to be
 re-established from time to time, the design of the transport has been
@@ -2419,7 +2419,7 @@ are independent for each peer in the channel and start at 0.
 They're only explicitly relayed to the other node in the case of
 re-establishment, otherwise they are implicit.
 
-### Requirements
+#### Requirements
 
 A funding node:
   - upon disconnection:
@@ -2541,7 +2541,7 @@ A node:
     - if it has sent a previous `shutdown`:
       - MUST retransmit `shutdown`.
 
-### Rationale
+#### Rationale
 
 The requirements above ensure that the opening phase is nearly
 atomic: if it doesn't complete, it starts again. The only exception
@@ -2614,7 +2614,7 @@ interactive transaction construction, or safely abort that transaction
 if it was not signed by one of the peers, who has thus already removed
 it from its state.
 
-# Authors
+## Authors
 
 [ FIXME: Insert Author List ]
 

@@ -1,0 +1,9 @@
+{
+  "default": false,
+
+  // There should be only one top-level heading.
+  "MD025": true,
+
+  // The first line should be top-level heading.
+  "MD041": true
+}

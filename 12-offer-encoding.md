@@ -1,6 +1,6 @@
 # BOLT #12: Flexible Protocol for Lightning Payments
 
-# Table of Contents
+## Table of Contents
 
   * [Limitations of BOLT 11](#limitations-of-bolt-11)
   * [Payment Flow Scenarios](#payment-flow-scenarios)
@@ -11,7 +11,7 @@
   * [Invoices](#invoices)
   * [Invoice Errors](#invoice-errors)
 
-# Limitations of BOLT 11
+## Limitations of BOLT 11
 
 The BOLT 11 invoice format has proven popular but has several
 limitations:
@@ -36,7 +36,7 @@ limitations:
    payment attempts are made for the same user.
 
 
-# Payment Flow Scenarios
+## Payment Flow Scenarios
 
 Here we use "user" as shorthand for the individual user's lightning
 node and "merchant" as the shorthand for the node of someone who is
@@ -58,7 +58,7 @@ The merchant-pays-user flow (e.g. ATM or refund):
 3. The merchant confirms the *invoice_node_id* to ensure it's about to pay the correct
    person, and makes a payment to the invoice.
 
-## Payment Proofs and Payer Proofs
+### Payment Proofs and Payer Proofs
 
 Note that the normal lightning "proof of payment" can only demonstrate that an
 invoice was paid (by showing the preimage of the `payment_hash`), not who paid
@@ -70,7 +70,7 @@ to request the invoice.  In addition, the Merkle construction of the BOLT 12
 invoice signature allows the user to reveal invoice fields in case
 of a dispute selectively.
 
-# Encoding
+## Encoding
 
 Each of the forms documented here are in
 [TLV](01-messaging.md#type-length-value-format) format.
@@ -80,7 +80,7 @@ The supported ASCII encoding is the human-readable prefix, followed by a
 optionally interspersed with `+` (for indicating additional data is to
 come).  There is no checksum, unlike bech32m.
 
-## Requirements
+### Requirements
 
 Writers of a bolt12 string:
 - MUST either use all lowercase or all UPPERCASE.
@@ -94,7 +94,7 @@ Readers of a bolt12 string:
   two bech32 characters:
   - MUST remove the `+` and whitespace.
 
-## Rationale
+### Rationale
 
 The use of bech32 is arbitrary but already exists in the bitcoin
 world.  We currently omit the six-character trailing checksum: QR
@@ -114,7 +114,7 @@ zzzzz
 
 See [format-string-test.json](bolt12/format-string-test.json).
 
-# Signature Calculation
+## Signature Calculation
 
 All signatures are created as per
 [BIP-340](https://github.com/bitcoin/bips/blob/master/bip-0340.mediawiki)
@@ -179,7 +179,7 @@ Assume L1A2A > L3A:
 Signature = SIG("lightninginvoicesignature", Root, nodekey)
 ```
 
-# Offers
+## Offers
 
 Offers are a precursor to an invoice_request: readers will request an invoice
 (or multiple) based on the offer.  An offer can be much longer-lived than a
@@ -192,7 +192,7 @@ distinct TLV ranges.
 
 The human-readable prefix for offers is `lno`.
 
-## TLV Fields for Offers
+### TLV Fields for Offers
 
 1. `tlv_stream`: `offer`
 2. types:
@@ -230,7 +230,7 @@ The human-readable prefix for offers is `lno`.
     2. data:
         * [`point`:`id`]
 
-## Requirements For Offers
+### Requirements For Offers
 
 A writer of an offer:
   - MUST NOT set any TLV fields outside the inclusive ranges: 1 to 79 and 1000000000 to 1999999999.
@@ -321,7 +321,7 @@ A reader of an offer:
       - MUST send the onion message to `offer_issuer_id`
     - MAY send more than one invoice request onion message at once.
 
-## Rationale
+### Rationale
 
 The entire offer is reflected in the invoice_request, both for
 completeness (so all information will be returned in the invoice), and
@@ -348,7 +348,7 @@ painful to have to special-case the "only one left" offer generation.
 
 Offers can be used to simply send money without expecting anything in return (tips, kudos, donations, etc), which means the description field is optional (the `offer_issuer` field is very useful for this case!); if you are charging for something specific, the description is vital for the user to know what it was they paid for.
 
-# Invoice Requests
+## Invoice Requests
 
 Invoice Requests are a request for an invoice; the human-readable prefix for
 invoice requests is `lnr`.
@@ -376,7 +376,7 @@ leaves are unguessable, allowing a future compact representation to hide fields
 while still allowing signature validation.
 
 
-## TLV Fields for `invoice_request`
+### TLV Fields for `invoice_request`
 
 1. `tlv_stream`: `invoice_request`
 2. types:
@@ -447,7 +447,7 @@ while still allowing signature validation.
     2. data:
         * [`bip340sig`:`sig`]
 
-## Requirements for Invoice Requests
+### Requirements for Invoice Requests
 
 The writer:
   - if it is responding to an offer:
@@ -545,7 +545,7 @@ The reader:
     - MUST reject the invoice request if `invreq_chain`.`chain` is not a supported chain.
 
 
-## Rationale
+### Rationale
 
 `invreq_metadata` might typically contain information about the derivation of the
 `invreq_payer_id`.  This should not leak any information (such as using a simple
@@ -572,7 +572,7 @@ informative for the payer to know how the sender claims
 
 The requirement to use `offer_paths` if present, ensures a node does not reveal it is the source of an offer if it is asked directly.  Similarly, the requirement that the correct path is used for the offer ensures that cannot be made to reveal that it is the same node that created some other offer.
 
-# Invoices
+## Invoices
 
 Invoices are a payment request, and when the payment is made, 
 the payment preimage can be combined with the invoice to form a cryptographic receipt.
@@ -686,7 +686,7 @@ the `onion_message` `invoice` field.
    * [`u16`:`len`]
    * [`len*byte`:`address`]
 
-## Invoice Features
+### Invoice Features
 
 | Bits | Description                      | Name           |
 |------|----------------------------------|----------------|
@@ -699,7 +699,7 @@ MAY (17) use multiple part payments to pay the invoice.
 Some implementations may not support MPP (e.g. for small payments), or
 may (due to capacity limits on a single channel) require it.
 
-## Requirements
+### Requirements
 
 A writer of an invoice:
   - MUST set `invoice_created_at` to the number of seconds since Midnight 1
@@ -796,7 +796,7 @@ A reader of an invoice:
   - otherwise (derived from an offer):
     - MUST reject the invoice if it did not arrive via invoice request `onionmsg_tlv` `reply_path`.
 
-## Rationale
+### Rationale
 
 Because the messaging layer is unreliable, it's quite possible to
 receive multiple requests for the same offer.  As it's the caller's
@@ -843,13 +843,13 @@ to the invoice request requirements, and we also require it to be mirrored
 here.
 
 
-# Invoice Errors
+## Invoice Errors
 
 Informative errors can be returned in an onion message `invoice_error`
 field (via the onion `reply_path`) for either `invoice_request` or
 `invoice`.
 
-## TLV Fields for `invoice_error`
+### TLV Fields for `invoice_error`
 
 1. `tlv_stream`: `invoice_error`
 2. types:
@@ -863,7 +863,7 @@ field (via the onion `reply_path`) for either `invoice_request` or
     2. data:
         * [`...*utf8`:`msg`]
 
-## Requirements
+### Requirements
 
 A writer of an invoice_error:
   - MUST set `error` to an explanatory string.
@@ -879,7 +879,7 @@ A writer of an invoice_error:
 A reader of an invoice_error:
    FIXME!
 
-## Rationale
+### Rationale
 
 Usually an error message is sufficient for diagnostics, however future
 enhancements may make automated handling useful.
@@ -891,7 +891,7 @@ sender of the invoice would have to guess how many msat that was,
 and could use the `invoice_error` to indicate if the recipient disagreed
 with the conversion so the sender can send a new invoice.
 
-# FIXME: Possible future extensions:
+## FIXME: Possible future extensions:
 
 1. The offer can require delivery info in the `invoice_request`.
 2. An offer can be updated: the response to an `invoice_request` is another offer,

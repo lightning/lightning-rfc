@@ -2,7 +2,7 @@
 
 This details the exact format of on-chain transactions, which both sides need to agree on to ensure signatures are valid. This consists of the funding transaction output script, the commitment transactions, and the HTLC transactions.
 
-# Table of Contents
+## Table of Contents
 
   * [Transactions](#transactions)
     * [Transaction Output Ordering](#transaction-output-ordering)
@@ -45,16 +45,16 @@ This details the exact format of on-chain transactions, which both sides need to
   * [References](#references)
   * [Authors](#authors)
 
-# Transactions
+## Transactions
 
-## Transaction Output Ordering
+### Transaction Output Ordering
 
 Outputs in transactions are always sorted according to:
  * first according to their value, smallest first (in whole satoshis, note that for HTLC outputs, the millisatoshi part must be ignored)
  * followed by `scriptpubkey`, comparing the common-length prefix lexicographically as if by `memcmp`, then selecting the shorter script (if they differ in length),
  * finally, for HTLC outputs, in increasing `cltv_expiry` order.
 
-## Rationale
+### Rationale
 
 Two offered HTLCs which have the same `amount` (rounded from `amount_msat`) and
 `payment_hash` will have identical outputs, even if their `cltv_expiry`
@@ -62,13 +62,13 @@ differs.  This only matters because the same ordering is used to send
 `htlc_signatures` and the HTLC transactions themselves are different, thus the
 two peers must agree on the canonical ordering for this case.
 
-## Use of Segwit
+### Use of Segwit
 
 Most transaction outputs used here are pay-to-witness-script-hash<sup>[BIP141](https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki#witness-program)</sup> (P2WSH) outputs: the Segwit version of P2SH. To spend such outputs, the last item on the witness stack must be the actual script that was used to generate the P2WSH output that is being spent. This last item has been omitted for brevity in the rest of this document.
 
 A `<>` designates an empty vector as required for compliance with MINIMALIF-standard rule.<sup>[MINIMALIF](https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2016-August/013014.html)</sup>
 
-## Funding Transaction Output
+### Funding Transaction Output
 
 * The funding output script is a P2WSH to:
 
@@ -76,7 +76,7 @@ A `<>` designates an empty vector as required for compliance with MINIMALIF-stan
 
 * Where `pubkey1` is the lexicographically lesser of the two `funding_pubkey` in compressed format, and where `pubkey2` is the lexicographically greater of the two.
 
-## Commitment Transaction
+### Commitment Transaction
 
 * version: 2
 * locktime: upper 8 bits are 0x20, lower 24 bits are the lower 24 bits of the obscured commitment number
@@ -95,7 +95,7 @@ case of unilateral close, yet still provides a useful index for both
 nodes (who know the `payment_basepoint`s) to quickly find a revoked
 commitment transaction.
 
-### Commitment Transaction Outputs
+#### Commitment Transaction Outputs
 
 To allow an opportunity for penalty transactions, in case of a revoked commitment transaction, all outputs that return funds to the owner of the commitment transaction (a.k.a. the "local node") must be delayed for `to_self_delay` blocks. For HTLCs this delay is done in a second-stage HTLC transaction (HTLC-success for HTLCs accepted by the local node, HTLC-timeout for HTLCs offered by the local node).
 
@@ -104,7 +104,7 @@ Otherwise, the required minimum timeout on HTLCs is lengthened by this delay, ca
 
 The amounts for each output MUST be rounded down to whole satoshis. If this amount, minus the fees for the HTLC transaction, is less than the `dust_limit_satoshis` set by the owner of the commitment transaction, the output MUST NOT be produced (thus the funds add to fees).
 
-#### `to_local` Output
+##### `to_local` Output
 
 This output sends funds back to the owner of this commitment transaction and thus must be timelocked using `OP_CHECKSEQUENCEVERIFY`. It can be claimed, without delay, by the other party if they know the revocation private key. The output is a version-0 P2WSH, with a witness script:
 
@@ -127,7 +127,7 @@ If a revoked commitment transaction is published, the other party can spend this
 
     <revocation_sig> 1
 
-#### `to_remote` Output
+##### `to_remote` Output
 
 If `option_anchors` applies to the commitment transaction, the `to_remote` output is encumbered by a one block csv lock.
 
@@ -140,7 +140,7 @@ The output is spent by an input with `nSequence` field set to `1` and witness:
 Otherwise, this output is a simple P2WPKH to `remotepubkey`. Note: the remote's commitment transaction uses your `localpubkey` for their
 `to_remote` output to yourself.
 
-#### `to_local_anchor` and `to_remote_anchor` Output (option_anchors)
+##### `to_local_anchor` and `to_remote_anchor` Output (option_anchors)
 
 This output can be spent by the local and remote nodes respectively to provide incentive to mine the transaction, using child-pays-for-parent. Both
 anchor outputs are always added, except for the case where there are no htlcs and one of the parties has a commitment output that is below the dust limit. 
@@ -170,7 +170,7 @@ After 16 blocks, anyone can sweep the anchor with witness:
 
     <>
 
-#### Offered HTLC Outputs
+##### Offered HTLC Outputs
 
 This output sends funds to either an HTLC-timeout transaction after the HTLC-timeout or to the remote node using the payment preimage or the revocation key. The output is a P2WSH, with a witness script (no option_anchors):
 
@@ -222,7 +222,7 @@ If a revoked commitment transaction is published, the remote node can spend this
 
 The sending node can use the HTLC-timeout transaction to timeout the HTLC once the HTLC is expired, as shown below. This is the only way that the local node can timeout the HTLC, and this branch requires `<remotehtlcsig>`, which ensures that the local node cannot prematurely timeout the HTLC since the HTLC-timeout transaction has `cltv_expiry` as its specified `locktime`. The local node must also wait `to_self_delay` before accessing these funds, allowing for the remote node to claim these funds if the transaction has been revoked.
 
-#### Received HTLC Outputs
+##### Received HTLC Outputs
 
 This output sends funds to either the remote node after the HTLC-timeout or using the revocation key, or to an HTLC-success transaction with a successful payment preimage. The output is a P2WSH, with a witness script (no `option_anchors`):
 
@@ -276,7 +276,7 @@ If a revoked commitment transaction is published, the remote node can spend this
 
 To redeem the HTLC, the HTLC-success transaction is used as detailed below. This is the only way that the local node can spend the HTLC, since this branch requires `<remotehtlcsig>`, which ensures that the local node must wait `to_self_delay` before accessing these funds allowing for the remote node to claim these funds if the transaction has been revoked.
 
-### Trimmed Outputs
+#### Trimmed Outputs
 
 Each peer specifies a `dust_limit_satoshis` below which outputs should
 not be produced; these outputs that are not produced are termed "trimmed". A trimmed output is
@@ -285,7 +285,7 @@ to the commitment transaction fee. For HTLCs, it needs to be taken into
 account that the second-stage HTLC transaction may also be below the
 limit.
 
-#### Requirements
+##### Requirements
 
 The base fee and anchor output values:
   - before the commitment transaction outputs are determined:
@@ -318,7 +318,7 @@ less than `dust_limit_satoshis` set by the transaction owner:
       - MUST be generated as specified in
       [Received HTLC Outputs](#received-htlc-outputs).
 
-## HTLC-Timeout and HTLC-Success Transactions
+### HTLC-Timeout and HTLC-Success Transactions
 
 These HTLC transactions are almost identical, except the HTLC-timeout transaction is timelocked. Both HTLC-timeout/HTLC-success transactions can be spent by a valid penalty transaction.
 
@@ -349,7 +349,7 @@ The witness script for the output is:
 
 To spend this via penalty, the remote node uses a witness stack `<revocationsig> 1`, and to collect the output, the local node uses an input with nSequence `to_self_delay` and a witness stack `<local_delayedsig> 0`.
 
-## Closing Transaction
+### Closing Transaction
 
 Note that there are two possible variants for each node.
 
@@ -364,7 +364,7 @@ Note that there are two possible variants for each node.
    * `txout` amount: final balance to be paid to one node (minus `fee_satoshis` from `closing_signed`, if this peer funded the channel)
    * `txout` script: as specified in that node's `scriptpubkey` in its `shutdown` message
 
-### Requirements
+#### Requirements
 
 Each node offering a signature:
   - MUST round each output down to whole satoshis.
@@ -372,7 +372,7 @@ Each node offering a signature:
   - MUST remove any output below its own `dust_limit_satoshis`.
   - MAY eliminate its own output.
 
-### Rationale
+#### Rationale
 
 There is a possibility of irreparable differences on closing if one
 node considers the other's output too small to allow propagation on
@@ -390,9 +390,9 @@ has been used.
 There will be at least one output, if the funding amount is greater
 than twice `dust_limit_satoshis`.
 
-## Fees
+### Fees
 
-### Fee Calculation
+#### Fee Calculation
 
 The fee calculation for both commitment transactions and HTLC
 transactions is based on the current `feerate_per_kw` and the
@@ -423,7 +423,7 @@ This yields the following *expected weights* (details of the computation in [App
 
 Note the reference to the "base fee" for a commitment transaction in the requirements below, which is what the funder pays. The actual fee may be higher than the amount calculated here, due to rounding and trimmed outputs.
 
-#### Requirements
+##### Requirements
 
 The fee for an HTLC-timeout transaction:
   - If `option_anchors` applies:
@@ -444,7 +444,7 @@ The base fee for a commitment transaction:
     [Trimmed Outputs](#trimmed-outputs), add 172 to `weight`.
     3. Multiply `feerate_per_kw` by `weight`, divide by 1000 (rounding down).
 
-#### Example
+##### Example
 
 For example, suppose there is a `feerate_per_kw` of 5000, a `dust_limit_satoshis` of 546 satoshis, and a commitment transaction with:
 * two offered HTLCs of 5000000 and 1000000 millisatoshis (5000 and 1000 satoshis)
@@ -476,7 +476,7 @@ fee (which adds the 1000 and 800 satoshi HTLCs that would make dust
 outputs) is 7140 satoshi. The final fee may be even higher if the
 `to_local` or `to_remote` outputs fall below `dust_limit_satoshis`.
 
-### Fee Payment
+#### Fee Payment
 
 Base commitment transaction fees and amounts for `to_local_anchor` and `to_remote_anchor` outputs are extracted from the funder's amount;
 Restrictions to the commitment tx output for the funder in relation to the
@@ -491,13 +491,13 @@ A node:
     - MAY send a `warning` and close the connection, or send an
       `error` and fail the channel.
 
-### Calculating Fees for Collaborative Transactions
+#### Calculating Fees for Collaborative Transactions
 
 For transactions constructed using the [interactive protocol](02-peer-protocol.md#interactive-transaction-construction),
 fees are paid by each party to the transaction, at a `feerate` determined during the
 initiation, with the initiator covering the fees for the common transaction fields.
 
-## Dust Limits
+### Dust Limits
 
 The `dust_limit_satoshis` parameter is used to configure the threshold below
 which nodes will not produce on-chain transaction outputs.
@@ -520,7 +520,7 @@ is explained in the following sections.
 In all these sections, the calculations are done with a feerate of 3000 sat/kB
 as per Bitcoin Core's implementation.
 
-### Pay to pubkey hash (p2pkh)
+#### Pay to pubkey hash (p2pkh)
 
 A p2pkh output is 34 bytes:
 
@@ -542,7 +542,7 @@ A p2pkh input is at least 148 bytes:
 
 The p2pkh dust threshold is then `(34 + 148) * 3000 / 1000 = 546 satoshis`
 
-### Pay to script hash (p2sh)
+#### Pay to script hash (p2sh)
 
 A p2sh output is 32 bytes:
 
@@ -555,7 +555,7 @@ script, so we use 148 bytes as a lower bound.
 
 The p2sh dust threshold is then `(32 + 148) * 3000 / 1000 = 540 satoshis`
 
-### Pay to witness pubkey hash (p2wpkh)
+#### Pay to witness pubkey hash (p2wpkh)
 
 A p2wpkh output is 31 bytes:
 
@@ -577,7 +577,7 @@ A p2wpkh input is at least 67 bytes (depending on the signature length):
 
 The p2wpkh dust threshold is then `(31 + 67) * 3000 / 1000 = 294 satoshis`
 
-### Pay to witness script hash (p2wsh)
+#### Pay to witness script hash (p2wsh)
 
 A p2wsh output is 43 bytes:
 
@@ -590,7 +590,7 @@ script, so we use 67 bytes as a lower bound.
 
 The p2wsh dust threshold is then `(43 + 67) * 3000 / 1000 = 330 satoshis`
 
-### Unknown segwit versions
+#### Unknown segwit versions
 
 Unknown segwit outputs are at most 51 bytes:
 
@@ -603,7 +603,7 @@ script, so we use 67 bytes as a lower bound.
 
 The unknown segwit version dust threshold is then `(51 + 67) * 3000 / 1000 = 354 satoshis`
 
-## Commitment Transaction Construction
+### Commitment Transaction Construction
 
 This section ties the previous sections together to detail the
 algorithm for constructing the commitment transaction for one peer:
@@ -632,9 +632,9 @@ also subtract two times the fixed anchor size of 330 sats from the funder
    * if `to_remote` exists or there are untrimmed HTLCs, add a [`to_remote_anchor` output](#to_local_anchor-and-to_remote_anchor-output-option_anchors)
 9. Sort the outputs into [BIP 69+CLTV order](#transaction-output-ordering).
 
-# Keys
+## Keys
 
-## Key Derivation
+### Key Derivation
 
 Each commitment transaction uses a unique `localpubkey`.
 The HTLC-success and HTLC-timeout transactions use `local_delayedpubkey` and `revocationpubkey`.
@@ -667,7 +667,7 @@ For efficiency, keys are generated from a series of per-commitment secrets
 that are generated from a single seed, which allows the receiver to compactly
 store them (see [below](#efficient-per-commitment-secret-storage)).
 
-### `localpubkey`, `local_htlcpubkey`, `remote_htlcpubkey`, `local_delayedpubkey`, and `remote_delayedpubkey` Derivation
+#### `localpubkey`, `local_htlcpubkey`, `remote_htlcpubkey`, `local_delayedpubkey`, and `remote_delayedpubkey` Derivation
 
 These pubkeys are simply generated by addition from their base points:
 
@@ -684,7 +684,7 @@ secrets are known (i.e. the private keys corresponding to `localpubkey`, `local_
 
     privkey = basepoint_secret + SHA256(per_commitment_point || basepoint)
 
-### `remotepubkey` Derivation
+#### `remotepubkey` Derivation
 
 The `remotepubkey` is simply the remote node's `payment_basepoint`.
 
@@ -695,7 +695,7 @@ transactions given to it which only have a `to_remote` output if it
 sees one of them onchain, but such transactions do not need any
 enforcement and should not be handed to a watchtower.
 
-### `revocationpubkey` Derivation
+#### `revocationpubkey` Derivation
 
 The `revocationpubkey` is a blinded key: when the local node wishes to create a new
 commitment for the remote node, it uses its own `revocation_basepoint` and the remote
@@ -724,7 +724,7 @@ is known:
 
     revocationprivkey = revocation_basepoint_secret * SHA256(revocation_basepoint || per_commitment_point) + per_commitment_secret * SHA256(per_commitment_point || revocation_basepoint)
 
-### Per-commitment Secret Requirements
+#### Per-commitment Secret Requirements
 
 A node:
   - MUST select an unguessable 256-bit seed for each connection,
@@ -756,7 +756,7 @@ The receiving node:
   - MAY store all previous per-commitment secrets.
   - MAY calculate them from a compact representation, as described below.
 
-## Efficient Per-commitment Secret Storage
+### Efficient Per-commitment Secret Storage
 
 The receiver of a series of secrets can store them compactly in an
 array of 49 (value,index) pairs. Because, for a given secret on a
@@ -829,9 +829,9 @@ This looks complicated, but remember that the index in entry `b` has
 `b` trailing 0s; the mask and compare simply checks if the index
 at each bucket is a prefix of the desired index.
 
-# Appendix A: Expected Weights
+## Appendix A: Expected Weights
 
-## Expected Weight of the Funding Transaction (v2 Channel Establishment)
+### Expected Weight of the Funding Transaction (v2 Channel Establishment)
 
 The *expected weight* of a funding transaction is calculated as follows:
 
@@ -868,7 +868,7 @@ Multiplying non-witness data by 4 results in a weight of:
       overall_weight = funding_transaction_weight + witness_weight
 
 
-## Expected Weight of the Commitment Transaction
+### Expected Weight of the Commitment Transaction
 
 The *expected weight* of a commitment transaction is calculated as follows:
 
@@ -983,7 +983,7 @@ Multiplying non-witness data by 4 results in a weight of:
 	overall_weight (no option_anchors) = 500 + 172 * num-htlc-outputs + 224 weight
 	overall_weight (option_anchors) = 900 + 172 * num-htlc-outputs + 224 weight
 
-## Expected Weight of HTLC-timeout and HTLC-success Transactions
+### Expected Weight of HTLC-timeout and HTLC-success Transactions
 
 The *expected weight* of an HTLC transaction is calculated as follows:
 
@@ -1119,7 +1119,7 @@ HTLC-success) results in weights of:
 	703 (HTLC-success) (706 with option_anchors))
                 - (really 702 and 705, but we use these numbers for historical reasons)
 
-# Appendix B: Funding Transaction Test Vectors
+## Appendix B: Funding Transaction Test Vectors
 
 In the following:
  - It's assumed that *local* is the funder.
@@ -1160,7 +1160,7 @@ The resulting funding transaction is:
     funding tx: 0200000001adbb20ea41a8423ea937e76e8151636bf6093b70eaff942930d20576600521fd000000006b48304502210090587b6201e166ad6af0227d3036a9454223d49a1f11839c1a362184340ef0240220577f7cd5cca78719405cbf1de7414ac027f0239ef6e214c90fcaab0454d84b3b012103535b32d5eb0a6ed0982a0479bbadc9868d9836f6ba94dd5a63be16d875069184ffffffff028096980000000000220020c015c4a6be010e21657068fc2e6a9d02b27ebe4d490a25846f7237f104d1a3cd20256d29010000001600143ca33c2e4446f4a305f23c80df8ad1afdcf652f900000000
     # txid: 8984484a580b825b9972d7adb15050b3ab624ccd731946b3eeddb92f4e7ef6be
 
-# Appendix C: Commitment and HTLC Transaction Test Vectors
+## Appendix C: Commitment and HTLC Transaction Test Vectors
 
 In the following:
  - *local* transactions are considered, which implies that all payments to *local* are delayed.
@@ -1620,11 +1620,11 @@ And, here are the test vectors themselves:
     # local_htlc_signature = 304402207157f452f2506d73c315192311893800cfb3cc235cc1185b1cfcc136b55230db022014be242dbc6c5da141fec4034e7f387f74d6ff1899453d72ba957467540e1ecb
     htlc_timeout_tx (htlc #5): 020000000001014bdccf28653066a2c554cafeffdfe1e678e64a69b056684deb0c4fba909423ec02000000000000000001e1120000000000002200204adb4e2f00643db396dd120d4e7dc17625f5f2c11a40d857accc862d6b7dd80e05004730440220471c9f3ad92e49b13b7b8059f43ecf8f7887b0dccbb9fdb54bfe23d62a8ae332022024bd22fae0740e86a44228c35330da9526fd7306dffb2b9dc362d5e78abef7cc0147304402207157f452f2506d73c315192311893800cfb3cc235cc1185b1cfcc136b55230db022014be242dbc6c5da141fec4034e7f387f74d6ff1899453d72ba957467540e1ecb01008576a91414011f7254d96b819c76986c277d115efce6f7b58763ac67210394854aa6eab5b2a8122cc726e9dded053a2184d88256816826d6231c068d4a5b7c820120876475527c21030d417a46946384f88d5f3337267c5e579765875dc4daca813e21734b140639e752ae67a9142002cc93ebefbb1b73f0af055dcc27a0b504ad7688ac6868fa010000
 
-# Appendix D: Per-commitment Secret Generation Test Vectors
+## Appendix D: Per-commitment Secret Generation Test Vectors
 
 These test the generation algorithm that all nodes use.
 
-## Generation Tests
+### Generation Tests
 
     name: generate_from_seed 0 final node
 	seed: 0x0000000000000000000000000000000000000000000000000000000000000000
@@ -1651,7 +1651,7 @@ These test the generation algorithm that all nodes use.
 	I: 1
 	output: 0x915c75942a26bb3a433a8ce2cb0427c29ec6c1775cfc78328b57f6ba7bfeaa9c
 
-## Storage Tests
+### Storage Tests
 
 These test the optional compact storage system. In many cases, an
 incorrect entry cannot be determined until its parent is revealed: an entry is
@@ -1847,7 +1847,7 @@ seeded with `0x000...00`.
 	secret: 0xa7efbc61aac46d34f77778bac22c8a20c6a46ca460addc49009bda875ec88fa4
 	output: ERROR
 
-# Appendix E: Key Derivation Test Vectors
+## Appendix E: Key Derivation Test Vectors
 
 These test the derivation for `localpubkey`, `remotepubkey`, `local_htlcpubkey`, `remote_htlcpubkey`, `local_delayedpubkey`, and
 `remote_delayedpubkey` (which use the same formula), as well as the `revocationpubkey`.
@@ -1899,7 +1899,7 @@ All of them use the following secrets (and thus the derived points):
     # => 0xd09ffff62ddb2297ab000cc85bcb4283fdeb6aa052affbc9dddcf33b61078110
     revocationprivkey: 0xd09ffff62ddb2297ab000cc85bcb4283fdeb6aa052affbc9dddcf33b61078110
 
-# Appendix F: Commitment and HTLC Transaction Test Vectors (anchors)
+## Appendix F: Commitment and HTLC Transaction Test Vectors (anchors)
 
 The anchor test vectors are based on the test cases as defined in appendix C.
 Note that in appendix C, `to_local_msat` and `to_remote_msat` are balances
@@ -2077,10 +2077,10 @@ before subtraction of:
 ]
 ```
 
-# Appendix G: Dual Funded Transaction Test Vectors
+## Appendix G: Dual Funded Transaction Test Vectors
 
-## Funding Transaction Construction
-### Preliminaries:
+### Funding Transaction Construction
+#### Preliminaries:
 
 ```
 Genesis block 0:
@@ -2094,7 +2094,7 @@ Parent transaction (spends coinbase of block 1):
 02000000000101f86fd1d0db3ac5a72df968622f31e6b5e6566a09e29206d7c7a55df90e181de800000000171600141fb9623ffd0d422eacc450fd1e967efc477b83ccffffffff0580b2e60e00000000220020fd89acf65485df89797d9ba7ba7a33624ac4452f00db08107f34257d33e5b94680b2e60e0000000017a9146a235d064786b49e7043e4a042d4cc429f7eb6948780b2e60e00000000160014fbb4db9d85fba5e301f4399e3038928e44e37d3280b2e60e0000000017a9147ecd1b519326bc13b0ec716e469b58ed02b112a087f0006bee0000000017a914f856a70093da3a5b5c4302ade033d4c2171705d387024730440220696f6cee2929f1feb3fd6adf024ca0f9aa2f4920ed6d35fb9ec5b78c8408475302201641afae11242160101c6f9932aeb4fcd1f13a9c6df5d1386def000ea259a35001210381d7d5b1bc0d7600565d827242576d9cb793bfe0754334af82289ee8b65d137600000000
 ```
 
-### Funding transaction (spends parent's outputs):
+#### Funding transaction (spends parent's outputs):
 
 Locktime: 120
 Feerate: 253 sat/kiloweight
@@ -2119,7 +2119,7 @@ Inputs:
 
 ```
 
-### Expected Opener's `tx_add_input` (input 0 above):
+#### Expected Opener's `tx_add_input` (input 0 above):
 ```
   num_inputs: 1
   tx_add_input:[
@@ -2134,7 +2134,7 @@ Inputs:
   ]
 ```
 
-### Expected Accepter's `tx_add_input` (input 2 above):
+#### Expected Accepter's `tx_add_input` (input 2 above):
 ```
   num_inputs: 1
   tx_add_input:[
@@ -2149,7 +2149,7 @@ Inputs:
   ]
 ```
 
-### Outputs: (scriptPubKeys)
+#### Outputs: (scriptPubKeys)
 ```
 # opener's change address
 pubkey: 0206e626a4c6d4392d4030bc78bd93f728d1ba61214a77c63adc17d71e32ded3df
@@ -2172,7 +2172,7 @@ scriptPubKey: 0020297b92c238163e820b82486084634b4846b86a3c658d87b9384192e6bea98e
 address: bcrt1q99ae9s3czclgyzuzfpsggc6tfprts63uvkxc0wfcgxfwd04f3mzs3asq6l
 ```
 
-### Expected Opener's `tx_add_output`:
+#### Expected Opener's `tx_add_output`:
 
 ```
   num_outputs: 2
@@ -2193,7 +2193,7 @@ address: bcrt1q99ae9s3czclgyzuzfpsggc6tfprts63uvkxc0wfcgxfwd04f3mzs3asq6l
   ]
 ```
 
-### Expected Accepter's `tx_add_output`:
+#### Expected Accepter's `tx_add_output`:
 
 ```
   num_outputs: 1
@@ -2208,7 +2208,7 @@ address: bcrt1q99ae9s3czclgyzuzfpsggc6tfprts63uvkxc0wfcgxfwd04f3mzs3asq6l
   ]
 ```
 
-### Expected Fee Calculation:
+#### Expected Fee Calculation:
 
 Opener's fees and change:
 ```
@@ -2247,7 +2247,7 @@ Opener's fees and change:
     as hex: e5effa0200000000
 ```
 
-### Accepter's fees and change:
+#### Accepter's fees and change:
 ```
     contributor_weight = inputs(txid, vout, scriptSig, sequence)
 			  * number contributor inputs * 4
@@ -2279,13 +2279,13 @@ Opener's fees and change:
     as hex: 1cf0fa0200000000
 ```
 
-### Unsigned Funding Transaction:
+#### Unsigned Funding Transaction:
 
 ```
 0200000002b932b0669cd0394d0d5bcc27e01ab8c511f1662a6799925b346c0cf18fca03430200000000fdffffffb932b0669cd0394d0d5bcc27e01ab8c511f1662a6799925b346c0cf18fca03430000000000fdffffff03e5effa02000000001600141ca1cca8855bad6bc1ea5436edd8cff10b7e448b1cf0fa020000000016001444cb0c39f93ecc372b5851725bd29d865d333b100084d71700000000220020297b92c238163e820b82486084634b4846b86a3c658d87b9384192e6bea98ec578000000
 ```
 
-### Expected Opener's `tx_signatures`:
+#### Expected Opener's `tx_signatures`:
 
 ```
   tx_signatures{
@@ -2299,7 +2299,7 @@ Opener's fees and change:
   }
 ```
 
-### Expected Accepter's `tx_signatures`:
+#### Expected Accepter's `tx_signatures`:
 
 ```
   tx_signatures{
@@ -2313,7 +2313,7 @@ Opener's fees and change:
   }
 ```
 
-#### Signed Funding Transaction:
+##### Signed Funding Transaction:
 
 Note locktime is set to 120.
 
@@ -2321,9 +2321,9 @@ Note locktime is set to 120.
 02000000000102b932b0669cd0394d0d5bcc27e01ab8c511f1662a6799925b346c0cf18fca03430200000000fdffffffb932b0669cd0394d0d5bcc27e01ab8c511f1662a6799925b346c0cf18fca03430000000000fdffffff03e5effa02000000001600141ca1cca8855bad6bc1ea5436edd8cff10b7e448b1cf0fa020000000016001444cb0c39f93ecc372b5851725bd29d865d333b100084d71700000000220020297b92c238163e820b82486084634b4846b86a3c658d87b9384192e6bea98ec50247304402207de9ba56bb9f641372e805782575ee840a899e61021c8b1572b3ec1d5b5950e9022069e9ba998915dae193d3c25cb89b5e64370e6a3a7755e7f31cf6d7cbc2a49f6d0121034695f5b7864c580bf11f9f8cb1a94eb336f2ce9ef872d2ae1a90ee276c772484022068656c6c6f2074686572652c2074686973206973206120626974636f6e2121212782012088a820add57dfe5277079d069ca4ad4893c96de91f88ffb981fdc6a2a34d5336c66aff8778000000
 ```
 
-# References
+## References
 
-# Authors
+## Authors
 
 [ FIXME: ]
 
