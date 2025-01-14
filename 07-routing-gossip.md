@@ -465,6 +465,8 @@ The origin node:
     reasons.
     - Note: such a `channel_update`, one not preceded by a
     `channel_announcement`, is invalid to any other peer and would be discarded.
+  - If the channel will not be announced (i.e. the `announce_channel` bit was not set) and `option_zero_conf` is used:
+    - MUST send a `channel_update` using the real channel `short_channel_id` once the channel is confirmed.
   - MUST set `signature` to the signature of the double-SHA256 of the entire
   remaining packet after `signature`, using its own `node_id`.
   - MUST set `chain_hash` AND `short_channel_id` to match the 32-byte hash AND
