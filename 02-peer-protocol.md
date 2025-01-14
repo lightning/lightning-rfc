@@ -2482,12 +2482,8 @@ A node:
   the last `commitment_signed` message the receiving node has sent:
     - MUST reuse the same commitment number for its next `commitment_signed`.
   - otherwise:
-    - if `next_commitment_number` is not 1 greater than the
-  commitment number of the last `commitment_signed` message the receiving
-  node has sent:
-      - SHOULD send an `error` and fail the channel.
-    - if it has not sent `commitment_signed`, AND `next_commitment_number`
-    is not equal to 1:
+    - if `next_commitment_number` is not equal to the commitment number of the
+      next `commitment_signed` the receiving node will send:
       - SHOULD send an `error` and fail the channel.
   - if `next_revocation_number` is equal to the commitment number of
   the last `revoke_and_ack` the receiving node sent, AND the receiving node
@@ -2520,7 +2516,8 @@ A receiving node:
   - if `next_funding_txid` is set:
     - if `next_funding_txid` matches the latest interactive funding transaction:
       - if it has not received `tx_signatures` for that funding transaction:
-        - MUST retransmit its `commitment_signed` for that funding transaction.
+        - if `next_commitment_number` is zero:
+          - MUST retransmit its `commitment_signed` for that funding transaction.
         - if it has already received `commitment_signed` and it should sign first,
           as specified in the [`tx_signatures` requirements](#the-tx_signatures-message):
           - MUST send its `tx_signatures` for that funding transaction.
@@ -2529,6 +2526,9 @@ A receiving node:
     - otherwise:
       - MUST send `tx_abort` to let the sending node know that they can forget
         this funding transaction.
+  - if `next_funding_txid` is not set, and `next_commitment_number` is zero:
+    - MUST immediately fail the channel and broadcast any relevant latest commitment
+      transaction.
 
 A node:
   - MUST NOT assume that previously-transmitted messages were lost,
