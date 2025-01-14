@@ -33,6 +33,11 @@ operation, and closing.
       * [Sharing funding signatures: `tx_signatures`](#sharing-funding-signatures-tx_signatures)
       * [Fee bumping: `tx_init_rbf` and `tx_ack_rbf`](#fee-bumping-tx_init_rbf-and-tx_ack_rbf)
     * [Channel Quiescence](#channel-quiescence)
+    * [Channel Splicing](#channel-splicing)
+      * [The `splice_init` Message](#the-splice_init-message)
+      * [The `splice_ack` Message](#the-splice_ack-message)
+      * [Splice Transaction Construction](#splice-transaction-construction)
+      * [Splice Completion](#splice-completion)
     * [Channel Close](#channel-close)
       * [Closing Initiation: `shutdown`](#closing-initiation-shutdown)
       * [Closing Negotiation: `closing_signed`](#closing-negotiation-closing_signed)
@@ -199,6 +204,13 @@ This message contains a transaction input.
     * [`prevtx_len*byte`:`prevtx`]
     * [`u32`:`prevtx_vout`]
     * [`u32`:`sequence`]
+    * [`tx_add_input_tlvs`:`tlvs`]
+
+1. `tlv_stream`: `tx_add_input_tlvs`
+2. types:
+   1. type: 0 (`shared_input_txid`)
+   2. data:
+     * [`sha256`:`funding_txid`]
 
 #### Requirements
 
@@ -392,11 +404,18 @@ the byte size of the input and output counts on the transaction to one (1).
     * [`sha256`:`txid`]
     * [`u16`:`num_witnesses`]
     * [`num_witnesses*witness`:`witnesses`]
+    * [`tx_signatures_tlvs`:`tlvs`]
 
 1. subtype: `witness`
 2. data:
     * [`u16`:`len`]
     * [`len*byte`:`witness_data`]
+
+1. `tlv_stream`: `tx_signatures_tlvs`
+2. types:
+   1. type: 0 (`shared_input_signature`)
+   2. data:
+     * [`signature`:`signature`]
 
 #### Requirements
 
@@ -1497,6 +1516,456 @@ channel state significantly more complex to maintain. This introduces the
 derivative property that it is impossible to batch multiple downstream protocols
 in the same quiescence session.
 
+## Channel Splicing
+
+Splicing is the term given for replacing the funding transaction with
+a new one. For simplicity, splicing takes place once a channel is
+[quiescent](#channel-quiescence).
+
+Operation returns to normal once the splice transaction has been signed
+(while waiting for one of the splice transactions to confirm), at which
+point the channel isn't quiescent anymore.
+
+The splice is finally terminated when both sides send `splice_locked`
+to indicate that one of the splice transactions reached acceptable depth.
+
+        +-------+                               +-------+
+        |       |--- splice_init -------------->|       |
+        |   A   |<--------------- splice_ack ---|   B   |
+        |       |                               |       |
+        |       |--- tx_add_input ------------->|       |
+        |       |<------------- tx_add_input ---|       |
+        |       |--- tx_add_input ------------->|       |
+        |       |<------------ tx_add_output ---|       |
+        |       |--- tx_add_output ------------>|       |
+        |       |<-------------- tx_complete ---|       |
+        |       |--- tx_add_output ------------>|       |
+        |       |<-------------- tx_complete ---|       |
+        |       |--- tx_complete -------------->|       |
+        |       |                               |       |
+        |       |--- commit_sig --------------->|       |
+        |       |<--------------- commit_sig ---|       |
+        |       |--- tx_signatures ------------>|       |
+        |       |<------------ tx_signatures ---|       |
+        |       |                               |       |
+        |       |       <RESUME CHANNEL>        |       |
+        |       |                               |       |
+        |       |--- update_add_htlc ---------->|       |
+        |       |--- commit_sig --------------->|       |
+        |       |--- commit_sig --------------->|       |
+        |       |<----------- revoke_and_ack ---|       |
+        |       |<--------------- commit_sig ---|       |
+        |       |<--------------- commit_sig ---|       |
+        |       |--- revoke_and_ack ----------->|       |
+        |       |                               |       |
+        |       |             <RBF>             |       |
+        |       |                               |       |
+        |       |<-------------- tx_init_rbf ---|       |
+        |       |--- tx_ack_rbf --------------->|       |
+        |       |<------------- tx_add_input ---|       |
+        |       |--- tx_add_input ------------->|       |
+        |       |<------------- tx_add_input ---|       |
+        |       |--- tx_add_output ------------>|       |
+        |       |<------------ tx_add_output ---|       |
+        |       |--- tx_complete -------------->|       |
+        |       |<------------ tx_add_output ---|       |
+        |       |--- tx_complete -------------->|       |
+        |       |<-------------- tx_complete ---|       |
+        |       |                               |       |
+        |       |<--------------- commit_sig ---|       |
+        |       |--- commit_sig --------------->|       |
+        |       |--- tx_signatures ------------>|       |
+        |       |<------------ tx_signatures ---|       |
+        |       |                               |       |
+        |       |       <RESUME CHANNEL>        |       |
+        |       |                               |       |
+        |       |--- update_add_htlc ---------->|       |
+        |       |--- commit_sig --------------->|       |
+        |       |--- commit_sig --------------->|       |
+        |       |--- commit_sig --------------->|       |
+        |       |<----------- revoke_and_ack ---|       |
+        |       |<--------------- commit_sig ---|       |
+        |       |<--------------- commit_sig ---|       |
+        |       |<--------------- commit_sig ---|       |
+        |       |--- revoke_and_ack ----------->|       |
+        |       |                               |       |
+        |       |      <SPLICE COMPLETION>      |       |
+        |       |                               |       |
+        |       |--- splice_locked ------------>|       |
+        |       |<------------ splice_locked ---|       |
+        |       |                               |       |
+        |       |       <RESUME CHANNEL>        |       |
+        |       |                               |       |
+        |       |--- update_add_htlc ---------->|       |
+        |       |--- commit_sig --------------->|       |
+        |       |<----------- revoke_and_ack ---|       |
+        |       |<--------------- commit_sig ---|       |
+        |       |--- revoke_and_ack ----------->|       |
+        |       |                               |       |
+        +-------+                               +-------+
+
+### The `splice_init` Message
+
+1. type: 80 (`splice_init`)
+2. data:
+    * [`channel_id`:`channel_id`]
+    * [`s64`:`funding_contribution_satoshis`]
+    * [`u32`:`funding_feerate_perkw`]
+    * [`u32`:`locktime`]
+    * [`point`:`funding_pubkey`]
+    * [`splice_init_tlvs`:`tlvs`]
+
+1. `tlv_stream`: `splice_init_tlvs`
+2. types:
+   1. type: 2 (`require_confirmed_inputs`)
+
+`funding_contribution_satoshis` is the amount the sender is adding to their
+channel balance (splice-in) or removing from their channel balance (splice-out).
+
+#### Requirements
+
+The sending node:
+  - MUST NOT send `splice_init` if the channel is not quiescent.
+  - MUST NOT send `splice_init` if it is not the quiescence initiator.
+  - MUST NOT send `splice_init` before sending and receiving `channel_ready`.
+  - MUST NOT send `splice_init` while another splice is being negotiated.
+  - MUST NOT send `splice_init` if another splice has been negotiated but
+    `splice_locked` has not been sent and received.
+  - MUST NOT send `splice_init` if it has previously sent `shutdown`.
+  - If it is splicing funds out of the channel:
+    - MUST set `funding_contribution_satoshis` to a negative value matching
+      the amount that will be subtracted from its current channel balance.
+  - If it is splicing funds into the channel:
+    - MUST set `funding_contribution_satoshis` to a positive value matching
+      the amount that will be added to its current channel balance.
+  - If it requires the receiving node to only use confirmed inputs:
+    - MUST set `require_confirmed_inputs`.
+  - SHOULD use a different `funding_pubkey` than the one used for the
+    previous funding transaction.
+
+The receiving node:
+  - If the channel is not quiescent:
+    - MUST send a `warning` and close the connection or send an `error`
+      and fail the channel.
+  - If the sending node is not the quiescence initiator:
+    - MUST send a `warning` and close the connection or send an `error`
+      and fail the channel.
+  - If another splice is already being negotiated:
+    - MUST send a `warning` and close the connection or send an `error`
+      and fail the channel.
+  - If another splice has been negotiated but isn't locked yet:
+    - MUST send a `warning` and close the connection or send an `error`
+      and fail the channel.
+  - If it has received `shutdown`:
+    - MUST send a `warning` and close the connection or send an `error`
+      and fail the channel.
+  - If `funding_contribution_satoshis` is negative and its absolute value is
+    greater than the sending node's current channel balance:
+    - MUST send a `warning` and close the connection or send an `error`
+      and fail the channel.
+  - If it accepts the splice attempt:
+    - MUST respond with `splice_ack`.
+  - Otherwise (it rejects the splice):
+    - MUST respond with `tx_abort`.
+
+### The `splice_ack` Message
+
+1. type: 81 (`splice_ack`)
+2. data:
+    * [`channel_id`:`channel_id`]
+    * [`s64`:`funding_contribution_satoshis`]
+    * [`point`:`funding_pubkey`]
+    * [`splice_ack_tlvs`:`tlvs`]
+
+1. `tlv_stream`: `splice_ack_tlvs`
+2. types:
+   1. type: 2 (`require_confirmed_inputs`)
+
+#### Requirements
+
+The sending node:
+  - SHOULD use a different `funding_pubkey` than the one used for the
+    previous funding transaction.
+  - MAY set `funding_contribution_satoshis` to `0` if they don't want
+    to contribute to the splice.
+  - If it requires the receiving node to only use confirmed inputs:
+    - MUST set `require_confirmed_inputs`.
+
+The receiving node:
+  - If it has sent `splice_init`:
+    - If `funding_contribution_satoshis` is negative and its absolute value is
+      greater than the sending node's current channel balance:
+      - MUST send a `warning` and close the connection or send an `error`
+        and fail the channel.
+    - If it accepts the splice attempt:
+      - MUST start an `interactive-tx` session to create the splice transaction.
+    - Otherwise:
+      - MUST reject the splice attempt by sending `tx_abort`.
+  - Otherwise (it has not sent `splice_init`):
+    - MUST send a `warning` and close the connection or send an `error`
+      and fail the channel.
+
+### Splice Transaction Construction
+
+The splice transaction is created using the
+[Interactive Transaction Construction](#interactive-transaction-construction)
+protocol, with the following additional requirements.
+
+#### The `tx_add_input` Message
+
+##### Requirements
+
+The sending node:
+  - If it is the splice initiator:
+    - MUST add the current channel input to the splice transaction by
+      sending `tx_add_input` with `shared_input_txid` containing the
+      `txid` of the latest funding transaction.
+      - MUST NOT include `prevtx` for that shared input.
+  - If the receiver set `require_confirmed_inputs` in `splice_init`,
+    `splice_ack`, `tx_init_rbf` or `tx_ack_rbf`:
+    - MUST NOT send a `tx_add_input` that contains an unconfirmed input.
+
+The receiving node:
+  - If `shared_input_txid` is set:
+    - If it doesn't match the `txid` of the latest funding transaction:
+      - MUST fail the negotiation by sending `tx_abort`.
+
+##### Rationale
+
+The splice transaction must spend the current channel funding output. The
+splice initiator is responsible for adding that input to the transaction,
+and pay the fees for its weight. Since both peers already have access to
+the funding transaction, it is wasteful to transmit it in the `prevtx`
+field. It may also exceed 65kB, which makes it impossible to include it
+in `tx_add_input` anyway, so we only transmit its `txid`.
+
+#### The `tx_add_output` Message
+
+##### Requirements
+
+The sending node:
+  - If it is the splice initiator:
+    - MUST send at least one `tx_add_output`, which contains the new 
+      channel's funding output based on the `funding_pubkey`s from
+      `splice_init` and `splice_ack`.
+      - MUST set the amount of that `tx_add_output` to the previous
+        channel capacity with the `funding_contribution_satoshis`s from
+        `splice_init` and `splice_ack` applied.
+
+##### Rationale
+
+The splice initiator is responsible for adding the new channel funding
+output to the transaction and paying the fees for its weight.
+
+#### The `tx_complete` Message
+
+##### Requirements
+
+The receiving node:
+  - MUST compute the channel balance for each side by adding their respective
+    `funding_contribution_satoshis` to their previous channel balance.
+  - MUST fail the negotiation by sending `tx_abort` if:
+    - There is not exactly one input spending the current funding transaction.
+    - There is not exactly one channel funding output using the funding public
+      keys and funding contributions from `splice_init` and `splice_ack`.
+    - This is an RBF attempt and the transaction's total fees is less than
+      the last successfully negotiated splice transaction's fees.
+    - Either side has added an output other than the channel funding output
+      and the balance for that side is less than the channel reserve that
+      matches the new channel capacity.
+
+##### Rationale
+
+If a side does not meet the reserve requirements, that's OK: but if they take
+funds out of the channel, they must ensure that they do meet them. If your peer
+adds a massive amount to the channel, then you only have to add more reserve if
+you want to contribute to the splice (and you can use `tx_remove_output` and/or
+`tx_remove_input` part-way through if this happens).
+
+### The `commitment_signed` Message
+
+After exchanging `tx_complete`, both peers send `commitment_signed` to commit
+to the splice transaction by creating a commitment transaction spending the
+new channel funding output.
+
+The usual [`commitment_signed`](#committing-updates-so-far-commitment_signed)
+requirements apply with the following additions.
+
+#### Requirements
+
+The sending node:
+  - MUST create a commitment transaction that spends the splice funding output and:
+    - Adds `funding_contribution_satoshis` from `splice_init` and `splice_ack`
+      to the main balance of their respective sender.
+    - Uses the same feerate as the existing commitment transaction.
+    - Uses the same `commitment_number` as the existing commitment transaction.
+    - Does not set the `batch` field.
+  - MUST send signatures for pending HTLCs.
+  - MUST remember the details of this splice transaction.
+
+The receiving node:
+  - MUST NOT respond with `revoke_and_ack`.
+  - If it has not already transmitted its `commitment_signed`:
+    - MUST send `commitment_signed`.
+  - If it should sign first, as specified in the [`tx_signatures` requirements](#the-tx_signatures-message):
+    - MUST send `tx_signatures`.
+
+On reconnection:
+  - If `next_funding_txid` matches the splice transaction:
+    - MUST retransmit `commitment_signed`.
+
+#### Rationale
+
+Once peers are ready to exchange commitment signatures, they must remember
+the details of the splice transaction to allow resuming the signatures
+exchange if a disconnection happens.
+
+#### The `tx_signatures` Message
+
+##### Requirements
+
+The sending node:
+  - MUST set `shared_input_signature` to a valid ECDSA signature for the
+    `tx_add_input` spending the previous channel funding output using the
+    `funding_pubkey` that matches this input.
+
+The receiving node:
+  - If `shared_input_signature` is not set:
+    - MUST send an `error` and fail the channel.
+  - If `shared_input_signature` is not valid or non-compliant with the
+    LOW-S-standard rule<sup>[LOWS](https://github.com/bitcoin/bitcoin/pull/6769)</sup>:
+    - MUST send an `error` and fail the channel.
+  - MUST consider the channel no longer quiescent.
+
+On reconnection:
+  - If `next_funding_txid` matches the splice transaction:
+    - MUST retransmit `tx_signatures`.
+
+##### Rationale
+
+Spending the channel funding output requires a signature from both peers.
+Each peer transmits its own signature, which allows creating a valid
+witness for the shared input without adding an additional message.
+
+Once `tx_signatures` have been exchanged, the splice transaction can be
+broadcast. The channel is no longer quiescent: normal operation can resume
+while waiting for the transaction to confirm and `splice_locked` messages
+to be exchanged.
+
+#### The `tx_init_rbf` Message
+
+##### Requirements
+
+The sending node:
+  - MUST NOT send `tx_init_rbf` if the channel is not quiescent.
+  - MUST NOT send `tx_init_rbf` if it is not the quiescence initiator.
+  - MAY send `tx_init_rbf` even if it is not the splice initiator.
+  - MUST NOT send `tx_init_rbf` if it has previously sent `splice_locked`.
+  - MAY set `funding_output_contribution` to a different value than the
+    `funding_contribution_satoshis` used in `splice_init` or `splice_ack`,
+    or in previous RBF attempts.
+
+The receiving node:
+  - If the channel is not quiescent:
+    - MUST send a `warning` and close the connection or send an `error`
+      and fail the channel.
+  - If the sending node is not the quiescence initiator:
+    - MUST send a `warning` and close the connection or send an `error`
+      and fail the channel.
+  - If the sender previously sent `splice_locked`:
+    - MUST send a `warning` and close the connection or send an `error`
+      and fail the channel.
+  - If `funding_output_contribution` is negative and its absolute value is
+    greater than the sending node's current channel balance:
+    - MUST send a `warning` and close the connection or send an `error`
+      and fail the channel.
+
+##### Rationale
+
+Splice transactions can be RBF-ed to react to changes in the mempool feerate.
+We allow both nodes to initiate RBF, because any one of them may want to take
+this opportunity to splice additional funds into or out of the channel without
+waiting for the initial splice transaction to confirm.
+
+Since splice transactions always spend the current channel funding output, the
+RBF attempts automatically double-spend each other.
+
+#### The `tx_ack_rbf` Message
+
+##### Requirements
+
+The sending node:
+  - MAY set `funding_output_contribution` to a different value than the
+    `funding_contribution_satoshis` used in `splice_init` or `splice_ack`,
+    or in previous RBF attempts.
+
+The receiving node:
+  - If `funding_output_contribution` is negative and its absolute value is
+    greater than the sending node's current channel balance:
+    - MUST send a `warning` and close the connection or send an `error`
+      and fail the channel.
+
+### Splice Completion
+
+Once splice transactions have been signed but haven't reached acceptable
+depth, channel operations go back to normal and HTLCs can be exchanged,
+with the caveat that payments must be valid for all splice transactions.
+
+Nodes keep track of multiple commitment transactions (one for the current
+funding transaction and one for each splice transaction) and exchange
+signatures for each of these commitment transactions.
+
+```
++------------+        +-----------+
+| Funding Tx |---+--->| Commit Tx |
++------------+   |    +-----------+
+                 |    +-----------+            +-----------+
+                 +--->| Splice Tx |----------->| Commit Tx |
+                 |    +-----------+            +-----------+
+                 |    +---------------+        +-----------+
+                 +--->| Splice RBF #1 |------->| Commit Tx |
+                 |    +---------------+        +-----------+
+                 |    +---------------+        +-----------+
+                 +--->| Splice RBF #2 |------->| Commit Tx |
+                      +---------------+        +-----------+
+```
+
+The splice completes by exchanging `splice_locked` messages, at which point
+the locked transaction replaces the previous funding transaction.
+
+#### The `splice_locked` Message
+
+1. type: 77 (`splice_locked`)
+2. data:
+   * [`channel_id`:`channel_id`]
+   * [`sha256`:`splice_txid`]
+
+##### Requirements
+
+Each node:
+  - If any splice transaction reaches acceptable depth:
+    - MUST send `splice_locked`.
+
+Once a node has sent and received `splice_locked`:
+  - MUST consider the locked splice transaction to be the new funding
+    transaction for all future `commitment_signed` messages and splice
+    negotiations.
+  - SHOULD discard the previous funding transaction and RBF attempts.
+  - MUST send `announcement_signatures` with `short_channel_id` matching
+    the locked splice transaction.
+
+On reconnection:
+  - MUST retransmit its last `splice_locked` if the `commitment_number`
+    is the same as before sending `splice_locked`.
+
+##### Rationale
+
+If a disconnection happens, nodes cannot know whether their peer received
+their `splice_locked` message, so they retransmit it. Redundant messages
+are harmless and can be safely ignored. If updates to the commitment have
+been signed, this implicitly acknowledges that `splice_locked` has been
+received and doesn't need to be retransmitted.
+
 ## Channel Close
 
 Nodes can negotiate a mutual close of the connection, which unlike a
@@ -1541,6 +2010,7 @@ A sending node:
   - if there are updates pending on the receiving node's commitment transaction:
     - MUST NOT send a `shutdown`.
   - MUST NOT send multiple `shutdown` messages.
+  - MUST NOT send `shutdown` if there is a splice transaction that isn't locked yet.
   - MUST NOT send an `update_add_htlc` after a `shutdown`.
   - if no HTLCs remain in either commitment transaction (including dust HTLCs)
     and neither side has a pending `revoke_and_ack` to send:
@@ -2016,6 +2486,8 @@ A sending node:
   - MUST increase the value of `id` by 1 for each successive offer.
   - if it is relaying a payment inside a blinded route:
     - MUST set `path_key` (see [Route Blinding](04-onion-routing.md#route-blinding))
+  - if a splice is pending:
+    - MUST ensure that requirements are met for all commmitment transactions.
 
 `id` MUST NOT be reset to 0 after the update is complete (i.e. after `revoke_and_ack` has
 been received). It MUST continue incrementing instead.
@@ -2047,6 +2519,8 @@ A receiving node:
     - MUST respond with an error as detailed in [Failure Messages](04-onion-routing.md#failure-messages)
   - Otherwise:
     - MUST follow the requirements for the reader of `payload` in [Payload Format](04-onion-routing.md#payload-format)
+  - If a splice is pending:
+    - MUST ensure that requirements are met for all commmitment transactions.
 
 The `onion_routing_packet` contains an obfuscated list of hops and instructions for each hop along the path.
 It commits to the HTLC by setting the `payment_hash` as associated data, i.e. includes the `payment_hash` in the computation of HMACs.
@@ -2081,6 +2555,9 @@ reach a state where it is unable to send or receive any non-dust HTLC while
 maintaining its channel reserve (because of the increased weight of the
 commitment transaction), resulting in a degraded channel. See [#728](https://github.com/lightningnetwork/lightning-rfc/issues/728)
 for more details.
+
+If splicing is supported, there can be more than one commitment transaction
+at a time: proposed changes must be valid for all of them.
 
 ### Removing an HTLC: `update_fulfill_htlc`, `update_fail_htlc`, and `update_fail_malformed_htlc`
 
@@ -2196,6 +2673,14 @@ sign the resulting transaction (as defined in [BOLT #3](03-transactions.md)), an
    * [`signature`:`signature`]
    * [`u16`:`num_htlcs`]
    * [`num_htlcs*signature`:`htlc_signature`]
+   * [`commitment_signed_tlvs`:`tlvs`]
+
+1. `tlv_stream`: `commitment_signed_tlvs`
+2. types:
+   1. type: 0 (`batch`)
+   2. data:
+     * [`u16`:`batch_size`]
+     * [`sha256`:`funding_txid`]
 
 #### Requirements
 
@@ -2212,6 +2697,13 @@ fee changes).
     to the ordering of the commitment transaction (see [BOLT #3](03-transactions.md#transaction-input-and-output-ordering)).
   - if it has not recently received a message from the remote node:
       - SHOULD use `ping` and await the reply `pong` before sending `commitment_signed`.
+  - If there are `N` pending splice transactions:
+    - MUST send `commitment_signed` for the current channel funding output.
+    - MUST send `commitment_signed` for each of the splice transactions.
+    - MUST set `batch_size` to `N + 1` in every `commitment_signed` message.
+    - MUST set `funding_txid` to the funding transaction spent by that commitment.
+  - Otherwise:
+    - MUST NOT include the `batch` field.      
 
 A receiving node:
   - once all pending updates are applied:
@@ -2225,7 +2717,25 @@ A receiving node:
   - if any `htlc_signature` is not valid for the corresponding HTLC transaction OR non-compliant with LOW-S-standard rule <sup>[LOWS](https://github.com/bitcoin/bitcoin/pull/6769)</sup>:
     - MUST send a `warning` and close the connection, or send an
       `error` and fail the channel.
-  - MUST respond with a `revoke_and_ack` message.
+  - If there are pending splice transactions and `batch` is not set:
+    - MUST send an `error` and fail the channel.
+  - If `batch` is set:
+    - MUST wait until it has received `batch_size` messages.
+    - If there are pending splice transactions:
+      - MUST validate each `commitment_signed` based on `funding_txid`.
+      - If `commitment_signed` is missing for a funding transaction:
+        - MUST send an `error` and fail the channel.
+      - Otherwise:
+        - MUST respond with a `revoke_and_ack` message.
+    - Otherwise (no pending splice transactions):
+      - MUST ignore `commitment_signed` where `funding_txid` does not match
+        the current funding transaction.
+      - If `commitment_signed` is missing for the current funding transaction:
+        - MUST send an `error` and fail the channel.
+      - Otherwise:
+        - MUST respond with a `revoke_and_ack` message.
+  - Otherwise:
+    - MUST respond with a `revoke_and_ack` message.
 
 #### Rationale
 
@@ -2247,6 +2757,13 @@ stating time-locks on HTLC outputs.
 
 The `option_anchors` allows HTLC transactions to "bring their own fees" by
 attaching other inputs and outputs, hence the modified signature flags.
+
+Splicing requires us to send and receive additional signatures, as we don't
+know which (if any) of the splice transactions will end up being the new
+channel funding transaction. We send `commitment_signed` for each of the
+pending splice transactions and for the current funding transaction. When
+sending `splice_locked`, we may receive obsolete `commitment_signed` from
+our peer: we can safely ignore them by filtering on `funding_txid`.
 
 ### Completing the Transition to the Updated State: `revoke_and_ack`
 
@@ -2275,6 +2792,8 @@ A sending node:
   the previous commitment transaction.
   - MUST set `next_per_commitment_point` to the values for its next commitment
   transaction.
+  - MUST send a single `revoke_and_ack` message, even if it is responding to
+  a `batch` of `commitment_signed` messages.
 
 A receiving node:
   - if `per_commitment_secret` is not a valid secret key or does not generate the previous `per_commitment_point`:
@@ -2330,6 +2849,8 @@ A sending node:
       - if the dust balance of the local transaction at the updated `feerate_per_kw` is greater than `max_dust_htlc_exposure_msat`:
         - MAY NOT send `update_fee`
         - MAY fail the channel
+  - if a splice is pending:
+    - MUST ensure that requirements are met for all commmitment transactions.
 
 A receiving node:
   - if the `update_fee` is too low for timely processing, OR is unreasonably large:
@@ -2349,6 +2870,8 @@ A receiving node:
           - MAY fail the channel
       - if the dust balance of the local transaction at the updated `feerate_per_kw` is greater than `max_dust_htlc_exposure_msat`:
           - MAY fail the channel
+  - if a splice is pending:
+    - MUST ensure that requirements are met for all commmitment transactions.
 
 #### Rationale
 
@@ -2376,6 +2899,9 @@ If on-chain fees increase while commitments contain many HTLCs that will
 be trimmed at the updated feerate, this could overflow the configured
 `max_dust_htlc_exposure_msat`. Whether to close the channel preemptively
 or not is left as a matter of node policy.
+
+If splicing is supported, there can be more than one commitment transaction
+at a time: proposed changes must be valid for all of them.
 
 ## Message Retransmission
 
@@ -2466,6 +2992,8 @@ The sending node:
   - if it has sent `commitment_signed` for an interactive transaction construction but
     it has not received `tx_signatures`:
     - MUST set `next_funding_txid` to the txid of that interactive transaction.
+    - if it has not received `commitment_signed` for that interactive transaction:
+      - MUST set `next_commitment_number` to the commitment number of the `commitment_signed` it sent.
   - otherwise:
     - MUST NOT set `next_funding_txid`.
 
@@ -2518,14 +3046,22 @@ A node:
 
 A receiving node:
   - if `next_funding_txid` is set:
-    - if `next_funding_txid` matches the latest interactive funding transaction:
-      - if it has not received `tx_signatures` for that funding transaction:
+    - if `next_funding_txid` matches the latest interactive funding transaction
+      or the current channel funding transaction:
+      - if `next_commitment_number` is equal to the commitment number of the
+        `commitment_signed` message it sent for this funding transaction:
         - MUST retransmit its `commitment_signed` for that funding transaction.
-        - if it has already received `commitment_signed` and it should sign first,
-          as specified in the [`tx_signatures` requirements](#the-tx_signatures-message):
-          - MUST send its `tx_signatures` for that funding transaction.
+      - if it has already received `commitment_signed` and it should sign first,
+        as specified in the [`tx_signatures` requirements](#the-tx_signatures-message):
+        - MUST send its `tx_signatures` for that funding transaction.
       - if it has already received `tx_signatures` for that funding transaction:
         - MUST send its `tx_signatures` for that funding transaction.
+    - if `next_funding_txid` matches the latest funding transaction:
+      - if that transaction has reached acceptable depth:
+        - MUST send `splice_locked`.        
+    - if it also sets `next_funding_txid` in its own `channel_reestablish`, but the
+      values don't match:
+      - MUST send an `error` and fail the channel.
     - otherwise:
       - MUST send `tx_abort` to let the sending node know that they can forget
         this funding transaction.
