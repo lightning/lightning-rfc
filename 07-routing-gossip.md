@@ -82,43 +82,50 @@ The `announcement_signatures` message is created by constructing a `channel_anno
 `announcement_signatures` message may be sent.
 
 A node:
-  - if the `open_channel` message has the `announce_channel` bit set AND a `shutdown` message has not been sent:
-    - MUST send the `announcement_signatures` message.
-      - MUST NOT send `announcement_signatures` until `channel_ready` has been sent and received.
-      - MUST NOT send `announcement_signatures` until the funding transaction has enough confirmations to ensure that it won't be reorganized.
-      - MUST send the `announcement_signatures` message after `splice_locked` has been sent and received.
-  - otherwise:
+  - If the `open_channel` message has the `announce_channel` bit set AND a `shutdown` message has not been sent:
+    - After `channel_ready` has been sent and received AND the funding transaction has enough confirmations to ensure that it won't be reorganized:
+      - MUST send `announcement_signatures` for the funding transaction.
+    - After `splice_locked` has been sent and received AND the splice transaction has enough confirmations to ensure that it won't be reorganized:
+      - MUST send `announcement_signatures` for the matching splice transaction.
+  - Otherwise:
     - MUST NOT send the `announcement_signatures` message.
-  - upon reconnection (once the above timing requirements have been met):
-    - MUST respond to the first `announcement_signatures` message with its own
-    `announcement_signatures` message.
-    - if it has NOT received an `announcement_signatures` message:
-      - SHOULD retransmit the `announcement_signatures` message.
+  - Upon reconnection (once the above timing requirements have been met):
+    - If it has NOT previously received `announcement_signatures` for the funding transaction:
+      - MUST retransmit its own `announcement_signatures` message.
+    - If it receives `announcement_signatures` for the funding transaction:
+      - MUST respond with its own `announcement_signatures` message.
+    - MUST wait for `splice_locked` before retransmitting `announcement_signatures` for splice transactions.
 
 A recipient node:
-  - if the `short_channel_id` is NOT correct:
-    - SHOULD send a `warning` and close the connection, or send an
-      `error` and fail the channel.
-  - if the `node_signature` OR the `bitcoin_signature` is NOT correct:
-    - MAY send a `warning` and close the connection, or send an
-      `error` and fail the channel.
-  - if it has sent AND received a valid `announcement_signatures` message:
+  - If the `short_channel_id` doesn't match one of its funding transactions:
+    - SHOULD send a `warning`.
+  - If the `node_signature` OR the `bitcoin_signature` is NOT correct:
+    - MAY send a `warning` and close the connection, or send an `error` and fail the channel.
+  - If it has sent AND received a valid `announcement_signatures` message:
     - SHOULD queue the `channel_announcement` message for its peers.
-  - if it has not sent `channel_ready`:
-    - MAY defer handling the `announcement_signatures` until after it has sent `channel_ready`.
-    - otherwise:
+  - If it has not sent `channel_ready`:
+    - SHOULD defer handling the `announcement_signatures` until after it has sent `channel_ready`.
+    - Otherwise:
       - MUST ignore it.
+  - If it has not sent `splice_locked` for the transaction matching this `short_channel_id`:
+    - SHOULD defer handling the `announcement_signatures` until after it has sent `splice_locked`.
 
 ### Rationale
 
-The reason for allowing deferring of a premature announcement_signatures is
+The reason for allowing deferring of a premature `announcement_signatures` is
 that an earlier version of the spec did not require waiting for receipt of
-funding locked: deferring rather than ignoring it allows compatibility with
+`channel_ready`: deferring rather than ignoring it allows compatibility with
 this behavior.
 
 Channels must not be announced before the funding transaction has enough
 confirmations, because a blockchain reorganization would otherwise invalidate
 the `short_channel_id`.
+
+When splicing is used, a `channel_announcement` is generated for every splice
+transaction once both sides have sent `splice_locked`. This lets the network
+know that the transaction spending a currently active channel is a splice and
+not a closing transaction, and this channel can still be used with its updated
+`short_channel_id`.
 
 ## The `channel_announcement` Message
 
@@ -169,9 +176,18 @@ The origin node:
   that the channel was opened within:
     - for the _Bitcoin blockchain_:
       - MUST set `chain_hash` value (encoded in hex) equal to `6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000`.
-  - MUST set `short_channel_id` to refer to the confirmed funding transaction,
-  as specified in [BOLT #2](02-peer-protocol.md#the-channel_ready-message).
-    - Note: the corresponding output MUST be a P2WSH, as described in [BOLT #3](03-transactions.md#funding-transaction-output).
+  - When announcing a channel creation:
+    - MUST set `short_channel_id` to refer to the confirmed funding transaction,
+      as specified in [BOLT #2](02-peer-protocol.md#the-channel_ready-message).
+  - When announcing a splice transaction:
+    - MUST set `short_channel_id` to refer to the confirmed splice transaction
+      for which `splice_locked` has been sent and received, as specified in
+      [BOLT #2](02-peer-protocol.md#the-splice_locked-message).
+    - SHOULD keep relaying payments that use the `short_channel_id`s of its
+      previous `channel_announcement`s.
+    - SHOULD send a new `channel_update` using the `short_channel_id` that
+      matches the latest `channel_announcement`.
+  - Note: the corresponding output MUST be a P2WSH, as described in [BOLT #3](03-transactions.md#funding-transaction-output).
   - MUST set `node_id_1` and `node_id_2` to the public keys of the two nodes
   operating the channel, such that `node_id_1` is the lexicographically-lesser of the
   two compressed keys sorted in ascending lexicographic order.
@@ -252,9 +268,11 @@ optional) features will have _odd_ feature bits, while incompatible features
 will have _even_ feature bits
 (["It's OK to be odd!"](00-introduction.md#glossary-and-terminology-guide)).
 
-A delay of 12 blocks is used when forgetting a channel on funding output spend
-as to permit a new `channel_announcement` to propagate which indicates this
-channel was spliced.
+A delay of 12 blocks is used when forgetting a channel after detecting that it
+has been spent: this can allow a new `channel_announcement` to propagate to
+indicate that this channel was spliced and not closed. Thanks to this delay,
+payments can still be relayed on the channel while the splice transaction is
+waiting for enough confirmations.
 
 ## The `node_announcement` Message
 
