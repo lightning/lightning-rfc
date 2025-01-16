@@ -1943,7 +1943,9 @@ race condition if both nodes send `closing_complete` to change their `closer_scr
 same time: when that happens, the `closing_complete` they receive will be using their previous
 output script, so they shouldn't sign the corresponding transaction. When that happens, we simply
 reconnect, which provides the opportunity for both nodes to send their latest output script in
-`shutdown` and restart the signing flow.
+`shutdown` and restart the signing flow. We include the closer and closee scripts in `closing_sig`
+to allow our peer to detect a script mismatch and correctly ignore the signatures, which also
+helps debugging race conditions.
 
 If the closer proposes a transaction which will not relay (an output is dust, or the fee rate it
 proposes is too low), it doesn't harm the closee to sign the transaction.
