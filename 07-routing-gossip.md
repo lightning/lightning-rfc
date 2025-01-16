@@ -78,8 +78,9 @@ The willingness of the initiating node to announce the channel is signaled durin
 
 ### Requirements
 
-The `announcement_signatures` message is created by constructing a `channel_announcement` message, corresponding to the newly established channel, and signing it with the secrets matching an endpoint's `node_id` and `bitcoin_key`. After it's signed, the
-`announcement_signatures` message may be sent.
+The `announcement_signatures` message is created by constructing a `channel_announcement` message,
+corresponding to the newly confirmed channel funding transaction, and signing it with the secrets
+matching an endpoint's `node_id` and `bitcoin_key`.
 
 A node:
   - If the `open_channel` message has the `announce_channel` bit set AND a `shutdown` message has not been sent:
@@ -89,7 +90,7 @@ A node:
     - MUST NOT send the `announcement_signatures` message.
   - Upon reconnection (once the above timing requirements have been met):
     - If it has NOT previously received `announcement_signatures` for the funding transaction:
-      - MUST retransmit its own `announcement_signatures` message.
+      - MUST send its own `announcement_signatures` message.
     - If it receives `announcement_signatures` for the funding transaction:
       - MUST respond with its own `announcement_signatures` message.
 
@@ -198,7 +199,10 @@ The receiving node:
   - if the specified `chain_hash` is unknown to the receiver:
     - MUST ignore the message.
   - if the `short_channel_id`'s output does NOT have at least 6 confirmations:
-    - SHOULD ignore the message.
+    - MAY accept the message if the output is close to 6 confirmations, in case
+      the receiving node hasn't received the latest block(s) yet.
+    - otherwise:
+      - SHOULD ignore the message.
   - otherwise:
     - if `bitcoin_signature_1`, `bitcoin_signature_2`, `node_signature_1` OR
     `node_signature_2` are invalid OR NOT correct:
