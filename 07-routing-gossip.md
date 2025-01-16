@@ -102,7 +102,7 @@ A recipient node:
     - MAY send a `warning` and close the connection, or send an
       `error` and fail the channel.
   - If it has sent AND received a valid `announcement_signatures` message:
-    - If the funding transaction has more than 6 confirmations:
+    - If the funding transaction has at least 6 confirmations:
       - SHOULD queue the `channel_announcement` message for its peers.
   - If it has not sent `channel_ready`:
     - SHOULD defer handling the `announcement_signatures` until after it has sent `channel_ready`.
