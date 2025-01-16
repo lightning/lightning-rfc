@@ -78,42 +78,36 @@ The willingness of the initiating node to announce the channel is signaled durin
 
 ### Requirements
 
-The `announcement_signatures` message is created by constructing a `channel_announcement` message, corresponding to the newly established channel, and signing it with the secrets matching an endpoint's `node_id` and `bitcoin_key`. After it's signed, the
-`announcement_signatures` message may be sent.
+The `announcement_signatures` message is created by constructing a `channel_announcement` message,
+corresponding to the newly confirmed channel funding transaction, and signing it with the secrets
+matching an endpoint's `node_id` and `bitcoin_key`.
 
 A node:
-  - if the `open_channel` message has the `announce_channel` bit set AND a `shutdown` message has not been sent:
-    - MUST send the `announcement_signatures` message.
-      - MUST NOT send `announcement_signatures` until `channel_ready` has been sent and received.
-      - MUST NOT send `announcement_signatures` until the funding transaction has enough confirmations to ensure that it won't be reorganized.
-  - otherwise:
+  - If the `open_channel` message has the `announce_channel` bit set AND a `shutdown` message has not been sent:
+    - After `channel_ready` has been sent and received AND the funding transaction has enough confirmations to ensure that it won't be reorganized:
+      - MUST send `announcement_signatures` for the funding transaction.
+  - Otherwise:
     - MUST NOT send the `announcement_signatures` message.
-  - upon reconnection (once the above timing requirements have been met):
-    - MUST respond to the first `announcement_signatures` message with its own
-    `announcement_signatures` message.
-    - if it has NOT received an `announcement_signatures` message:
-      - SHOULD retransmit the `announcement_signatures` message.
+  - Upon reconnection (once the above timing requirements have been met):
+    - If it has NOT previously received `announcement_signatures` for the funding transaction:
+      - MUST send its own `announcement_signatures` message.
+    - If it receives `announcement_signatures` for the funding transaction:
+      - MUST respond with its own `announcement_signatures` message.
 
 A recipient node:
-  - if the `short_channel_id` is NOT correct:
+  - If the `short_channel_id` is NOT correct:
     - SHOULD send a `warning` and close the connection, or send an
       `error` and fail the channel.
-  - if the `node_signature` OR the `bitcoin_signature` is NOT correct:
+  - If the `node_signature` OR the `bitcoin_signature` is NOT correct:
     - MAY send a `warning` and close the connection, or send an
       `error` and fail the channel.
-  - if it has sent AND received a valid `announcement_signatures` message:
-    - SHOULD queue the `channel_announcement` message for its peers.
-  - if it has not sent `channel_ready`:
-    - MAY defer handling the `announcement_signatures` until after it has sent `channel_ready`.
-    - otherwise:
-      - MUST ignore it.
+  - If it has sent AND received a valid `announcement_signatures` message:
+    - If the funding transaction has at least 6 confirmations:
+      - SHOULD queue the `channel_announcement` message for its peers.
+  - If it has not sent `channel_ready`:
+    - SHOULD defer handling the `announcement_signatures` until after it has sent `channel_ready`.
 
 ### Rationale
-
-The reason for allowing deferring of a premature announcement_signatures is
-that an earlier version of the spec did not require waiting for receipt of
-funding locked: deferring rather than ignoring it allows compatibility with
-this behavior.
 
 Channels must not be announced before the funding transaction has enough
 confirmations, because a blockchain reorganization would otherwise invalidate
@@ -189,6 +183,8 @@ The origin node:
   - MUST set `features` based on what features were negotiated for this channel, according to [BOLT #9](09-features.md#assigned-features-flags)
   - MUST set `len` to the minimum length required to hold the `features` bits
   it sets.
+  - If the funding transaction has less than 6 confirmations:
+    - MUST NOT send `channel_announcement`.
 
 The receiving node:
   - MUST verify the integrity AND authenticity of the message by verifying the
@@ -202,6 +198,11 @@ The receiving node:
     - MUST ignore the message.
   - if the specified `chain_hash` is unknown to the receiver:
     - MUST ignore the message.
+  - if the `short_channel_id`'s output does NOT have at least 6 confirmations:
+    - MAY accept the message if the output is close to 6 confirmations, in case
+      the receiving node hasn't received the latest block(s) yet.
+    - otherwise:
+      - SHOULD ignore the message.
   - otherwise:
     - if `bitcoin_signature_1`, `bitcoin_signature_2`, `node_signature_1` OR
     `node_signature_2` are invalid OR NOT correct:
